@@ -53,6 +53,8 @@ type DocumentResponse = {
 };
 
 type HistoryDocument = DocumentResponse & { created_at: string };
+type DocumentTheme = "CLASSIC" | "MODERN" | "MINIMAL" | "CORPORATE" | "BOLD" | "INDUSTRIAL";
+type DesignProfile = { id: number; business: number; document_type: string; theme: DocumentTheme };
 
 const emptyLineItem = (): LineItem => ({
   description: "",
@@ -77,6 +79,7 @@ export default function QuotationsPage() {
   const [documents, setDocuments] = useState<HistoryDocument[]>([]);
   const [selectedBusinessId, setSelectedBusinessId] = useState<string>("");
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
+  const [selectedTheme, setSelectedTheme] = useState<DocumentTheme>("CLASSIC");
   const [notes, setNotes] = useState("");
   const [issueDate, setIssueDate] = useState(() =>
     typeof window === "undefined" ? "" : new Date().toISOString().slice(0, 10),
@@ -143,6 +146,21 @@ export default function QuotationsPage() {
 
     void loadCustomers();
     void loadDocuments();
+  }, [selectedBusinessId]);
+
+  useEffect(() => {
+    if (!selectedBusinessId) return;
+    const loadDesignProfile = async () => {
+      try {
+        const payload = await fetchJson<DesignProfile[] | { results: DesignProfile[] }>(`/api/v1/documents/design-profiles/?business_id=${selectedBusinessId}`);
+        const profiles = Array.isArray(payload) ? payload : payload.results;
+        const quotationProfile = profiles.find((profile) => profile.document_type === "QUOTATION");
+        setSelectedTheme(quotationProfile?.theme ?? "CLASSIC");
+      } catch {
+        setSelectedTheme("CLASSIC");
+      }
+    };
+    void loadDesignProfile();
   }, [selectedBusinessId]);
 
   const subtotal = useMemo(
@@ -272,6 +290,16 @@ export default function QuotationsPage() {
     setIsSubmitting(true);
 
     try {
+      if (status === "issued") {
+        const existingProfiles = await fetchJson<DesignProfile[] | { results: DesignProfile[] }>(`/api/v1/documents/design-profiles/?business_id=${selectedBusinessId}`);
+        const profiles = Array.isArray(existingProfiles) ? existingProfiles : existingProfiles.results;
+        const existing = profiles.find((profile) => profile.document_type === "QUOTATION");
+        const profilePayload = { business: Number(selectedBusinessId), document_type: "QUOTATION", theme: selectedTheme };
+        await fetchJson<DesignProfile>(existing ? `/api/v1/documents/design-profiles/${existing.id}/` : "/api/v1/documents/design-profiles/", {
+          method: existing ? "PATCH" : "POST",
+          body: JSON.stringify(profilePayload),
+        });
+      }
       const result = await fetchJson<DocumentResponse>("/api/v1/documents/", {
         method: "POST",
         body: JSON.stringify(payload),
@@ -279,7 +307,13 @@ export default function QuotationsPage() {
       setCreatedDocument(result);
       setDocuments((current) => [result as HistoryDocument, ...current]);
       setMessage(status === "issued" ? `Quotation ${result.document_number} issued. Your PDF is ready.` : `Quotation saved successfully as ${result.document_number}.`);
-      if (status === "issued") await downloadPdf(result.id, result.document_number);
+      if (status === "issued") {
+        try {
+          await downloadPdf(result.id, result.document_number);
+        } catch (downloadError) {
+          setError(`Quotation was issued, but its PDF could not be downloaded: ${downloadError instanceof Error ? downloadError.message : "Unknown error"}`);
+        }
+      }
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Unable to save quotation.");
     } finally {
@@ -344,6 +378,18 @@ export default function QuotationsPage() {
                 </div>
               </div>
 
+              <div className="mt-4">
+                <label className="mb-1.5 block text-sm font-medium text-slate-600">Document design</label>
+                <select value={selectedTheme} onChange={(event) => setSelectedTheme(event.target.value as DocumentTheme)} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none transition focus:border-blue-500">
+                  <option value="CLASSIC">Classic — timeless and balanced</option>
+                  <option value="MODERN">Modern — crisp and contemporary</option>
+                  <option value="MINIMAL">Minimal — clean and restrained</option>
+                  <option value="CORPORATE">Corporate — formal and structured</option>
+                  <option value="BOLD">Bold — confident and expressive</option>
+                  <option value="INDUSTRIAL">Industrial — strong and utilitarian</option>
+                </select>
+                <p className="mt-1.5 text-xs text-slate-500">This theme is captured when the quotation is issued. Existing issued documents keep their original design.</p>
+              </div>
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-slate-600">Issue date</label>
