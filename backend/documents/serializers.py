@@ -160,6 +160,25 @@ class DocumentDesignProfileSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "updated_at"]
 
+    def validate_design_tokens(self, value):
+        allowed = {"accent_colour", "muted_colour", "font_scale", "corner_style"}
+        if not isinstance(value, dict) or set(value) - allowed:
+            raise serializers.ValidationError("Only approved design tokens may be configured.")
+        for key in ("accent_colour", "muted_colour"):
+            colour = value.get(key)
+            if colour and (not isinstance(colour, str) or len(colour) != 7 or not colour.startswith("#") or any(ch not in "0123456789abcdefABCDEF" for ch in colour[1:])):
+                raise serializers.ValidationError(f"{key} must be a six-digit hexadecimal colour.")
+        if "font_scale" in value:
+            try:
+                scale = float(value["font_scale"])
+            except (TypeError, ValueError):
+                raise serializers.ValidationError("font_scale must be between 0.8 and 1.2.")
+            if not 0.8 <= scale <= 1.2:
+                raise serializers.ValidationError("font_scale must be between 0.8 and 1.2.")
+        if value.get("corner_style", "square") not in ("square", "soft"):
+            raise serializers.ValidationError("corner_style must be square or soft.")
+        return value
+
     def validate(self, data):
         business = data.get("business") or getattr(self.instance, "business", None)
         request = self.context.get("request")
