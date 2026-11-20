@@ -3,6 +3,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from accounts.tenant_context import resolve_request_tenant
+from accounts.permissions import TenantWorkspacePermission
 from .models import Payment
 from .serializers import PaymentSerializer
 
@@ -10,7 +11,7 @@ from .serializers import PaymentSerializer
 class PaymentViewSet(viewsets.ModelViewSet):
     queryset = Payment.objects.select_related('tenant', 'business', 'customer', 'invoice').all()
     serializer_class = PaymentSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, TenantWorkspacePermission]
 
     def destroy(self, request, *args, **kwargs):
         return Response(
