@@ -2,6 +2,7 @@ from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 
 from accounts.tenant_context import resolve_request_tenant
+from accounts.permissions import TenantWorkspacePermission
 from .models import Document
 from .serializers import DocumentSerializer
 
@@ -9,7 +10,7 @@ from .serializers import DocumentSerializer
 class DocumentViewSet(viewsets.ModelViewSet):
     queryset = Document.objects.select_related('tenant', 'business', 'customer', 'payment').prefetch_related('line_items').all()
     serializer_class = DocumentSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, TenantWorkspacePermission]
 
     def get_queryset(self):
         queryset = Document.objects.select_related('tenant', 'business', 'customer', 'payment').prefetch_related('line_items').all()
