@@ -164,3 +164,47 @@ class DocumentLineItem(models.Model):
         self.line_total = total
         super().save(*args, **kwargs)
         self.document.save()
+
+
+class DocumentDesignProfile(models.Model):
+    THEME_CLASSIC = "CLASSIC"
+    THEME_MODERN = "MODERN"
+    THEME_MINIMAL = "MINIMAL"
+    THEME_CORPORATE = "CORPORATE"
+    THEME_BOLD = "BOLD"
+    THEME_INDUSTRIAL = "INDUSTRIAL"
+    THEME_CHOICES = [
+        (THEME_CLASSIC, "Classic"),
+        (THEME_MODERN, "Modern"),
+        (THEME_MINIMAL, "Minimal"),
+        (THEME_CORPORATE, "Corporate"),
+        (THEME_BOLD, "Bold"),
+        (THEME_INDUSTRIAL, "Industrial"),
+    ]
+
+    business = models.ForeignKey(Business, related_name="document_design_profiles", on_delete=models.CASCADE)
+    document_type = models.CharField(max_length=20, choices=Document.DOCUMENT_TYPE_CHOICES)
+    theme = models.CharField(max_length=20, choices=THEME_CHOICES, default=THEME_CLASSIC)
+    primary_colour = models.CharField(max_length=7, blank=True)
+    show_logo = models.BooleanField(default=True)
+    show_payment_details = models.BooleanField(default=True)
+    show_business_registration = models.BooleanField(default=True)
+    show_customer_vat_number = models.BooleanField(default=True)
+    design_tokens = models.JSONField(default=dict, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["business", "document_type"], name="unique_business_document_design"),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.primary_colour and not (
+            len(self.primary_colour) == 7 and self.primary_colour.startswith("#")
+            and all(ch in "0123456789abcdefABCDEF" for ch in self.primary_colour[1:])
+        ):
+            raise ValidationError({"primary_colour": "Use a six-digit hexadecimal colour such as #2563EB."})
+        allowed_tokens = {"accent_colour", "muted_colour", "font_scale", "corner_style"}
+        if set(self.design_tokens) - allowed_tokens:
+            raise ValidationError({"design_tokens": "Only approved design tokens may be configured."})
