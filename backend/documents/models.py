@@ -89,6 +89,10 @@ class Document(models.Model):
 
     def save(self, *args, **kwargs):
         self.full_clean()
+        if self.pk:
+            original_snapshot = type(self).objects.filter(pk=self.pk).values_list("issued_snapshot", flat=True).first()
+            if original_snapshot and self.issued_snapshot != original_snapshot:
+                raise ValidationError({"issued_snapshot": "An issued document snapshot is immutable."})
         is_new = self.pk is None
         requested_update_fields = kwargs.pop('update_fields', None)
         if is_new:
