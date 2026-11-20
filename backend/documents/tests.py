@@ -357,3 +357,54 @@ class QuotationWorkflowAPITest(TestCase):
             'design_tokens': {'custom_css': 'body { display: none; }'},
         }, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+    def test_persisted_issued_snapshot_cannot_be_replaced(self):
+        response = self.client.post('/api/v1/documents/', {
+            'business': self.business.id,
+            'customer': self.customer.id,
+            'document_type': 'INVOICE',
+            'status': 'issued',
+            'issue_date': '2026-11-20',
+            'line_items': [{
+                'description': 'Immutable record test',
+                'quantity': '1.00',
+                'unit_price': '500.00',
+                'discount': '0.00',
+                'tax_rate': '0.00',
+            }],
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        from django.core.exceptions import ValidationError
+        from documents.models import Document
+        document = Document.objects.get(pk=response.data['id'])
+        document.issued_snapshot = {'tampered': True}
+        with self.assertRaises(ValidationError):
+            document.save()
+
+    def test_selected_theme_is_captured_in_issued_snapshot(self):
+        from documents.models import Document, DocumentDesignProfile
+        DocumentDesignProfile.objects.create(
+            business=self.business,
+            document_type='QUOTATION',
+            theme='INDUSTRIAL',
+            primary_colour='#334155',
+        )
+        response = self.client.post('/api/v1/documents/', {
+            'business': self.business.id,
+            'customer': self.customer.id,
+            'document_type': 'QUOTATION',
+            'status': 'issued',
+            'issue_date': '2026-11-20',
+            'line_items': [{
+                'description': 'Theme snapshot test',
+                'quantity': '1.00',
+                'unit_price': '800.00',
+                'discount': '0.00',
+                'tax_rate': '0.00',
+            }],
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        document = Document.objects.get(pk=response.data['id'])
+        self.assertEqual(document.issued_snapshot['presentation']['theme'], 'INDUSTRIAL')
+        self.assertEqual(document.issued_snapshot['presentation']['primary_colour'], '#334155')
