@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-const navGroups = [
+type NavItem = { href: string; label: string; icon: string };
+
+const navGroups: { title: string; items: NavItem[] }[] = [
   { title: "Workspace", items: [{ href: "/", label: "Overview", icon: "◫" }, { href: "/businesses", label: "Businesses", icon: "▦" }, { href: "/customers", label: "Customers", icon: "♙" }] },
   { title: "Revenue", items: [{ href: "/quotations", label: "Quotations", icon: "▤" }, { href: "/invoices", label: "Invoices", icon: "▧" }, { href: "/receipts", label: "Receipts", icon: "▣" }, { href: "/payments", label: "Payments", icon: "↗" }] },
   { title: "Insights", items: [{ href: "/reports", label: "Reports", icon: "⌁" }] },
   { title: "Manage", items: [{ href: "/settings", label: "Settings", icon: "⚙" }] },
-] as const;
+];
 
 export function LayoutShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
