@@ -5,8 +5,8 @@ from rest_framework.permissions import IsAuthenticated
 
 from accounts.tenant_context import resolve_request_tenant
 from accounts.permissions import TenantWorkspacePermission
-from .models import Document
-from .serializers import DocumentSerializer
+from .models import Document, DocumentDesignProfile
+from .serializers import DocumentSerializer, DocumentDesignProfileSerializer
 from .rendering import render_document_pdf
 
 
@@ -40,3 +40,19 @@ class DocumentViewSet(viewsets.ModelViewSet):
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         response['Content-Length'] = str(len(pdf_bytes))
         return response
+
+
+
+class DocumentDesignProfileViewSet(viewsets.ModelViewSet):
+    serializer_class = DocumentDesignProfileSerializer
+    permission_classes = [IsAuthenticated, TenantWorkspacePermission]
+
+    def get_queryset(self):
+        queryset = DocumentDesignProfile.objects.select_related("business")
+        if not self.request.user.is_superuser:
+            tenant = resolve_request_tenant(self.request)
+            queryset = queryset.filter(business__tenant_id=tenant.id)
+        business_id = self.request.query_params.get("business_id")
+        if business_id:
+            queryset = queryset.filter(business_id=business_id)
+        return queryset
