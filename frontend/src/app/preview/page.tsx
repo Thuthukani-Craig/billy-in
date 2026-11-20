@@ -75,7 +75,7 @@ export default function PreviewPage() {
               </div>
             ))}
           </div>
-          <div className="mt-7 rounded-xl bg-slate-50 p-4"><p className="text-xs font-semibold text-slate-700">Designed for multiple businesses</p><p className="mt-1.5 text-xs leading-5 text-slate-500">Keep each business's customers, documents and financial activity organised while viewing the wider portfolio.</p></div>
+          <div className="mt-7 rounded-xl bg-slate-50 p-4"><p className="text-xs font-semibold text-slate-700">Designed for multiple businesses</p><p className="mt-1.5 text-xs leading-5 text-slate-500">Keep each business&apos;s customers, documents and financial activity organised while viewing the wider portfolio.</p></div>
         </section>
       </div>
 
