@@ -1,9 +1,7 @@
-from decimal import Decimal
-
 from django.db import transaction
 from rest_framework import serializers
 
-from accounts.models import TenantMembership
+from accounts.tenant_context import resolve_request_tenant
 from businesses.models import Business
 from .models import Document, DocumentLineItem
 
@@ -32,70 +30,74 @@ class DocumentSerializer(serializers.ModelSerializer):
             'subtotal', 'discount_amount', 'tax_amount', 'total', 'amount_paid', 'outstanding_balance',
             'line_items', 'payment', 'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'tenant', 'subtotal', 'discount_amount', 'tax_amount', 'total', 'amount_paid', 'outstanding_balance', 'created_at', 'updated_at']
-        extra_kwargs = {
-            'document_number': {'required': False, 'allow_blank': True},
-        }
+        read_only_fields = [
+            'id', 'tenant', 'document_number', 'subtotal', 'discount_amount', 'tax_amount',
+            'total', 'amount_paid', 'outstanding_balance', 'created_at', 'updated_at',
+        ]
 
     def validate(self, data):
-        business = data.get('business')
-        customer = data.get('customer')
-        tenant = data.get('tenant')
+        business = data.get('business') or getattr(self.instance, 'business', None)
+        customer = data.get('customer') or getattr(self.instance, 'customer', None)
+        document_type = data.get('document_type') or getattr(self.instance, 'document_type', None)
         if business and customer and customer.business_id != business.id:
             raise serializers.ValidationError({'customer': 'Customer must belong to the selected business.'})
-        if business and tenant and business.tenant_id != tenant:
-            raise serializers.ValidationError({'business': 'Business must belong to the same tenant as the document.'})
-        if customer and tenant and customer.tenant_id != tenant:
-            raise serializers.ValidationError({'customer': 'Customer must belong to the same tenant as the document.'})
-        if data.get('document_type') == 'RECEIPT' and not data.get('payment'):
+        request = self.context.get('request')
+        if request and business:
+            tenant = resolve_request_tenant(request)
+            if business.tenant_id != tenant.id:
+                raise serializers.ValidationError({'business': 'Business must belong to the selected tenant.'})
+            if customer and customer.tenant_id != tenant.id:
+                raise serializers.ValidationError({'customer': 'Customer must belong to the selected tenant.'})
+        if document_type == 'RECEIPT' and not data.get('payment', getattr(self.instance, 'payment', None)):
             raise serializers.ValidationError({'payment': 'Receipts must be linked to an actual payment record.'})
+        if self.instance and self.instance.document_type == 'RECEIPT':
+            raise serializers.ValidationError('Issued receipt records cannot be edited.')
         return data
 
     def _generate_document_number(self, business, document_type):
-        if document_type != 'QUOTATION':
-            return None
+        sequence_fields = {
+            'QUOTATION': ('QUO', 'next_quotation_number'),
+            'INVOICE': ('INV', 'next_invoice_number'),
+            'RECEIPT': ('REC', 'next_receipt_number'),
+        }
+        prefix, field_name = sequence_fields[document_type]
         with transaction.atomic():
-            business_obj = Business.objects.select_for_update().get(pk=business.pk)
-            code = business_obj.business_code
-            next_number = business_obj.next_quotation_number
-            document_number = f'{code}-QUO-{next_number:04d}'
-            business_obj.next_quotation_number = next_number + 1
-            business_obj.save(update_fields=['next_quotation_number'])
-            return document_number
+            locked_business = Business.objects.select_for_update().get(pk=business.pk)
+            sequence = getattr(locked_business, field_name)
+            setattr(locked_business, field_name, sequence + 1)
+            locked_business.save(update_fields=[field_name])
+            return f'{locked_business.business_code}-{prefix}-{sequence:04d}'
 
+    @transaction.atomic
     def create(self, validated_data):
         request = self.context.get('request')
-        if request and not request.user.is_superuser:
-            membership = TenantMembership.objects.filter(user=request.user, is_active=True).order_by('pk').first()
-            if membership is None:
-                raise serializers.ValidationError({'tenant': 'User is not assigned to any tenant.'})
-            tenant = membership.tenant
+        if request:
+            tenant = resolve_request_tenant(request)
             business = validated_data.get('business')
             customer = validated_data.get('customer')
-            if business and business.tenant_id != tenant.id:
-                raise serializers.ValidationError({'business': 'Business must belong to the same tenant as the document.'})
-            if customer and customer.tenant_id != tenant.id:
-                raise serializers.ValidationError({'customer': 'Customer must belong to the same tenant as the document.'})
+            if business is None or business.tenant_id != tenant.id:
+                raise serializers.ValidationError({'business': 'Choose a business in the selected tenant.'})
+            if customer is None or customer.tenant_id != tenant.id or customer.business_id != business.id:
+                raise serializers.ValidationError({'customer': 'Choose a customer belonging to the selected business.'})
             validated_data['tenant'] = tenant
 
         line_items_data = validated_data.pop('line_items', [])
         document = Document(**validated_data)
         if not document.document_number:
-            document_number = self._generate_document_number(document.business, document.document_type)
-            if document_number:
-                document.document_number = document_number
-        if document.document_number:
-            if Document.objects.filter(tenant=document.tenant, document_number=document.document_number).exists():
-                raise serializers.ValidationError({'document_number': 'Quotation number already exists for this tenant.'})
-
+            document.document_number = self._generate_document_number(document.business, document.document_type)
         document.save()
         for item_data in line_items_data:
             DocumentLineItem.objects.create(document=document, **item_data)
         document.refresh_from_db()
         return document
 
+    @transaction.atomic
     def update(self, instance, validated_data):
         line_items_data = validated_data.pop('line_items', None)
+        if instance.status not in (Document.STATUS_DRAFT,):
+            protected = {'business', 'customer', 'document_type', 'document_number'}
+            if protected.intersection(validated_data) or line_items_data is not None:
+                raise serializers.ValidationError('Only draft documents can change their parties or line items.')
         instance = super().update(instance, validated_data)
         if line_items_data is not None:
             instance.line_items.all().delete()
