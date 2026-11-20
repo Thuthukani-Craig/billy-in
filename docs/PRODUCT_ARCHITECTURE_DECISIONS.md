@@ -75,7 +75,7 @@ A business should be able to select defaults independently for quotations, invoi
 
 - Issuance captures a versioned JSON snapshot containing business identity/contact and payment details, customer details, line items, issue/due dates, notes, totals, and presentation settings.
 - A snapshot is created only when a document enters the issued state. Drafts and draft cancellations do not receive an issued snapshot.
-- Snapshot capture is one-time. The model layer rejects attempts to replace a previously persisted snapshot. Normal business/customer/profile edits do not rewrite it.
+- Snapshot capture is one-time. The model layer rejects attempts to replace a previously persisted snapshot. Normal business/customer/profile edits do not rewrite it. The business logo is copied to a document-specific storage path at issuance so replacing the current logo does not change historical output.
 - Official PDF output is generated server-side with ReportLab from the snapshot, not from live business/customer records and not through browser printing.
 - PDF downloads are authenticated and tenant-scoped. Drafts without an issued snapshot cannot be downloaded as official documents.
 - Per-business design profiles are configured independently for quotations, invoices and receipts. Supported themes: Classic, Modern, Minimal, Corporate, Bold and Industrial.
