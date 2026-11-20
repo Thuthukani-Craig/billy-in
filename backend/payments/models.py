@@ -39,6 +39,8 @@ class Payment(models.Model):
             raise ValidationError({'business': 'Business must belong to the same tenant as the payment.'})
         if self.tenant_id and self.customer_id and self.customer.tenant_id != self.tenant_id:
             raise ValidationError({'customer': 'Customer must belong to the same tenant as the payment.'})
+        if self.business_id and self.customer_id and self.customer.business_id != self.business_id:
+            raise ValidationError({'customer': 'Customer must belong to the same business as the payment.'})
         if self.invoice_id and self.tenant_id and self.invoice.tenant_id != self.tenant_id:
             raise ValidationError({'invoice': 'Invoice must belong to the same tenant as the payment.'})
         if self.invoice_id and self.business_id and self.invoice.business_id != self.business_id:
