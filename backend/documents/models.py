@@ -88,6 +88,7 @@ class Document(models.Model):
     def save(self, *args, **kwargs):
         self.full_clean()
         is_new = self.pk is None
+        requested_update_fields = kwargs.pop('update_fields', None)
         if is_new:
             super().save(*args, **kwargs)
 
@@ -97,7 +98,13 @@ class Document(models.Model):
         self.total = self.calculate_total()
         self.outstanding_balance = self.total - self.amount_paid
 
-        super().save(update_fields=['subtotal', 'discount_amount', 'tax_amount', 'total', 'outstanding_balance', 'updated_at'])
+        calculated_fields = {
+            'subtotal', 'discount_amount', 'tax_amount', 'total',
+            'outstanding_balance', 'updated_at',
+        }
+        if requested_update_fields is not None:
+            calculated_fields.update(requested_update_fields)
+        super().save(update_fields=list(calculated_fields))
 
     def calculate_subtotal(self):
         return sum((item.line_subtotal for item in self.line_items.all()), Decimal('0.00'))
