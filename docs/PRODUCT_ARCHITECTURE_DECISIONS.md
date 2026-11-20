@@ -70,3 +70,14 @@ A business should be able to select defaults independently for quotations, invoi
 - Do not reset or replace an existing database as part of routine development.
 - Add tests for tenant isolation, monetary calculations, document numbering, payment allocation, and PDF generation.
 - Record what was actually tested. A code inspection is not a passing test.
+
+## Issued document snapshots, PDF output and design profiles
+
+- Issuance captures a versioned JSON snapshot containing business identity/contact and payment details, customer details, line items, issue/due dates, notes, totals, and presentation settings.
+- A snapshot is created only when a document enters the issued state. Drafts and draft cancellations do not receive an issued snapshot.
+- Snapshot capture is one-time. The model layer rejects attempts to replace a previously persisted snapshot. Normal business/customer/profile edits do not rewrite it.
+- Official PDF output is generated server-side with ReportLab from the snapshot, not from live business/customer records and not through browser printing.
+- PDF downloads are authenticated and tenant-scoped. Drafts without an issued snapshot cannot be downloaded as official documents.
+- Per-business design profiles are configured independently for quotations, invoices and receipts. Supported themes: Classic, Modern, Minimal, Corporate, Bold and Industrial.
+- Design profiles expose constrained design tokens only; arbitrary HTML/CSS is not accepted. Theme and visibility settings are copied into the issued snapshot so later profile changes do not restyle historical documents.
+- Preview UI is not an issued document. The PDF generated after issuance is the authoritative rendered copy for the captured facts.
