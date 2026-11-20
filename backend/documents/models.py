@@ -49,6 +49,8 @@ class Document(models.Model):
     issue_date = models.DateField(null=True, blank=True)
     due_date = models.DateField(null=True, blank=True)
     notes = models.TextField(blank=True)
+    issued_snapshot = models.JSONField(default=dict, blank=True, editable=False)
+    issued_snapshot_at = models.DateTimeField(null=True, blank=True, editable=False)
     subtotal = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
     discount_amount = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
     tax_amount = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
