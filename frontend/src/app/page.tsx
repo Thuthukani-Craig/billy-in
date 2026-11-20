@@ -13,9 +13,9 @@ type DashboardSummary = {
   total_payments_received: number | string;
   outstanding_balances: number | string;
   overdue_invoices: number;
-  recent_invoices: Array<{ id: number; document_number: string; customer_name: string; total: number; status: string; created_at: string }>;
-  recent_quotations: Array<{ id: number; document_number: string; customer_name: string; total: number; status: string; created_at: string }>;
-  recent_payments: Array<{ id: number; customer_name: string; amount: number; payment_method: string; payment_date: string }>;
+  recent_invoices: Array<{ id: number; document_number: string; customer_name: string; total: number | string; status: string; created_at: string }>;
+  recent_quotations: Array<{ id: number; document_number: string; customer_name: string; total: number | string; status: string; created_at: string }>;
+  recent_payments: Array<{ id: number; customer_name: string; amount: number | string; payment_method: string; payment_date: string }>;
 };
 
 const money = (value: number | string) =>
