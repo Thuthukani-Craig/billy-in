@@ -85,3 +85,21 @@ class PaymentAllocationAPITest(TestCase):
         delete_response = self.client.delete(f'/api/v1/payments/{payment_id}/')
         self.assertEqual(delete_response.status_code, 405)
         self.assertTrue(self.invoice.payments.filter(pk=payment_id).exists())
+
+
+    def test_payment_can_generate_a_balanced_receipt_document(self):
+        payment_response = self.client.post('/api/v1/payments/', self.payment_payload('250.00'), format='json')
+        self.assertEqual(payment_response.status_code, 201, payment_response.data)
+
+        receipt_response = self.client.post('/api/v1/documents/', {
+            'business': self.business.id,
+            'customer': self.customer.id,
+            'document_type': 'RECEIPT',
+            'payment': payment_response.data['id'],
+            'issue_date': '2026-11-20',
+        }, format='json')
+        self.assertEqual(receipt_response.status_code, 201, receipt_response.data)
+        self.assertEqual(receipt_response.data['document_number'], 'PAYM-REC-0001')
+        self.assertEqual(receipt_response.data['total'], '250.00')
+        self.assertEqual(receipt_response.data['amount_paid'], '250.00')
+        self.assertEqual(receipt_response.data['outstanding_balance'], '0.00')
