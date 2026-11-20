@@ -295,14 +295,14 @@ export default function QuotationsPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Quotations</p>
             <h2 className="mt-1 text-3xl font-semibold text-slate-900">Quotation builder</h2>
           </div>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={isSubmitting}
-            className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400"
-          >
-            {isSubmitting ? "Saving..." : "Save quotation"}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => handleSubmit("draft")} disabled={isSubmitting} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50">
+              {isSubmitting ? "Saving..." : "Save draft"}
+            </button>
+            <button type="button" onClick={() => handleSubmit("issued")} disabled={isSubmitting} className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400">
+              {isSubmitting ? "Processing..." : "Issue & download PDF"}
+            </button>
+          </div>
         </div>
 
         {error ? <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div> : null}
@@ -515,9 +515,7 @@ export default function QuotationsPage() {
                 </div>
               </div>
 
-              <button type="button" onClick={() => window.print()} className="mt-6 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50">
-                Print / save as PDF
-              </button>
+              <p className="mt-5 text-xs leading-5 text-slate-500">Review the draft here. Once issued, Billy-in generates a downloadable PDF from the preserved document snapshot.</p>
             </div>
 
             <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/50">
@@ -537,6 +535,7 @@ export default function QuotationsPage() {
                         <span>{document.issue_date}</span>
                         <span>{formatCurrency(Number(document.total || 0))}</span>
                       </div>
+                      {document.status !== "draft" ? <button type="button" onClick={() => downloadPdf(document.id, document.document_number).catch((downloadError) => setError(downloadError instanceof Error ? downloadError.message : "Unable to download PDF."))} className="mt-3 text-xs font-semibold text-blue-700 hover:text-blue-800">Download PDF ↓</button> : null}
                     </div>
                   ))
                 )}
