@@ -46,6 +46,6 @@ def record_payment(*, tenant, business, customer, amount, invoice=None, **fields
             locked_invoice.status = Document.STATUS_PAID
         else:
             locked_invoice.status = Document.STATUS_PARTIALLY_PAID
-        locked_invoice.save(update_fields=["outstanding_balance", "status", "updated_at"])
+        locked_invoice.save(update_fields=["amount_paid", "outstanding_balance", "status", "updated_at"])
 
     return payment
