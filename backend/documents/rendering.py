@@ -58,7 +58,7 @@ def render_document_pdf(document):
     story = []
 
     logo_name = business.get("logo_storage_name")
-    if logo_name and default_storage.exists(logo_name):
+    if presentation.get("show_logo", True) and logo_name and default_storage.exists(logo_name):
         try:
             with default_storage.open(logo_name, "rb") as logo_file:
                 logo_bytes = BytesIO(logo_file.read())
@@ -69,8 +69,10 @@ def render_document_pdf(document):
         logo = _p(business.get("trading_name") or business.get("name"), heading)
 
     business_lines = [
-        business.get("name"), business.get("registration_number"),
-        business.get("vat_registration_number"), business.get("physical_address"),
+        business.get("name"),
+        business.get("registration_number") if presentation.get("show_business_registration", True) else "",
+        business.get("vat_registration_number") if presentation.get("show_business_registration", True) else "",
+        business.get("physical_address"),
         business.get("email"), business.get("telephone"),
     ]
     business_block = [_p(line, body) for line in business_lines if line]
@@ -91,7 +93,8 @@ def render_document_pdf(document):
 
     customer_lines = [customer.get("name"), customer.get("contact_person"),
                       customer.get("billing_address") or customer.get("physical_address"),
-                      customer.get("email"), customer.get("telephone"), customer.get("vat_number")]
+                      customer.get("email"), customer.get("telephone"),
+                      customer.get("vat_number") if presentation.get("show_customer_vat_number", True) else ""]
     customer_block = [_p(line, body) for line in customer_lines if line]
     party_table = Table([[[_p("BILLED TO", heading)] + customer_block,
                           [_p("FROM", heading)] + business_block]],
@@ -159,7 +162,7 @@ def render_document_pdf(document):
         ("Account type", business.get("account_type")),
     ]
     payment_lines = [f"{label}: {value}" for label, value in payment_lines if value]
-    if payment_lines or business.get("payment_instructions"):
+    if presentation.get("show_payment_details", True) and (payment_lines or business.get("payment_instructions")):
         story.extend([Spacer(1, 8 * mm), _p("PAYMENT DETAILS", heading)])
         story.extend([_p(line, body) for line in payment_lines])
         if business.get("payment_instructions"):
