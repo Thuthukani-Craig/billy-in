@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { LayoutShell } from "@/components/layout-shell";
-import { fetchJson } from "@/lib/api";
+import { API_BASE_URL, fetchJson, getCsrfToken } from "@/lib/api";
 
 type Business = {
   id: number;
@@ -221,7 +221,27 @@ export default function QuotationsPage() {
     }
   };
 
-  const handleSubmit = async () => {
+  const downloadPdf = async (documentId: number, documentNumber: string) => {
+    const headers = new Headers();
+    const csrfToken = getCsrfToken();
+    if (csrfToken) headers.set("X-CSRFToken", csrfToken);
+    const response = await fetch(`${API_BASE_URL}/api/v1/documents/${documentId}/pdf/`, { credentials: "include", headers });
+    if (!response.ok) {
+      const detail = await response.text();
+      throw new Error(detail || "Unable to generate the PDF.");
+    }
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = objectUrl;
+    anchor.download = `${documentNumber}.pdf`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(objectUrl);
+  };
+
+  const handleSubmit = async (status: "draft" | "issued" = "draft") => {
     if (!selectedBusinessId || !selectedCustomerId) {
       setError("Please select a business and customer before saving the quotation.");
       return;
@@ -231,7 +251,7 @@ export default function QuotationsPage() {
       business: Number(selectedBusinessId),
       customer: Number(selectedCustomerId),
       document_type: "QUOTATION",
-      status: "draft",
+      status,
       issue_date: issueDate,
       due_date: dueDate || null,
       notes,
@@ -258,7 +278,8 @@ export default function QuotationsPage() {
       });
       setCreatedDocument(result);
       setDocuments((current) => [result as HistoryDocument, ...current]);
-      setMessage(`Quotation saved successfully as ${result.document_number}.`);
+      setMessage(status === "issued" ? `Quotation ${result.document_number} issued. Your PDF is ready.` : `Quotation saved successfully as ${result.document_number}.`);
+      if (status === "issued") await downloadPdf(result.id, result.document_number);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Unable to save quotation.");
     } finally {
@@ -438,7 +459,7 @@ export default function QuotationsPage() {
             </div>
 
             <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/50">
-              <h3 className="text-lg font-semibold text-slate-900">Printed preview</h3>
+              <h3 className="text-lg font-semibold text-slate-900">Document preview</h3>
               <div className="print-shell mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <div className="print-page rounded-2xl bg-white p-6 shadow-sm">
                   <div className="mb-5 flex items-start justify-between border-b border-slate-200 pb-4">
