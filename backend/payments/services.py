@@ -2,7 +2,6 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
-from django.db.models import F
 
 from documents.models import Document
 from .models import Payment
@@ -41,9 +40,7 @@ def record_payment(*, tenant, business, customer, amount, invoice=None, **fields
     payment.save()
 
     if locked_invoice is not None:
-        locked_invoice.amount_paid = F("amount_paid") + amount
-        locked_invoice.save(update_fields=["amount_paid", "updated_at"])
-        locked_invoice.refresh_from_db(fields=["amount_paid", "total", "outstanding_balance", "status"])
+        locked_invoice.amount_paid = locked_invoice.amount_paid + amount
         locked_invoice.outstanding_balance = locked_invoice.total - locked_invoice.amount_paid
         if locked_invoice.outstanding_balance == Decimal("0.00"):
             locked_invoice.status = Document.STATUS_PAID
