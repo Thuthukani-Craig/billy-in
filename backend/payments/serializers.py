@@ -10,7 +10,7 @@ from .services import record_payment
 class PaymentSerializer(serializers.ModelSerializer):
     business_name = serializers.CharField(source='business.name', read_only=True)
     customer_name = serializers.CharField(source='customer.name', read_only=True)
-    tenant = serializers.IntegerField(read_only=True)
+    tenant = serializers.IntegerField(source='tenant_id', read_only=True)
 
     class Meta:
         model = Payment
