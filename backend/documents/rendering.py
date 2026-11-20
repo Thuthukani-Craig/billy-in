@@ -32,9 +32,11 @@ def render_document_pdf(document):
 
     presentation = snapshot.get("presentation", {})
     theme = THEMES.get(presentation.get("theme", "CLASSIC"), THEMES["CLASSIC"])
-    accent = colors.HexColor(presentation.get("primary_colour") or theme["accent"])
-    muted = colors.HexColor(theme["muted"])
+    tokens = presentation.get("design_tokens", {})
+    accent = colors.HexColor(tokens.get("accent_colour") or presentation.get("primary_colour") or theme["accent"])
+    muted = colors.HexColor(tokens.get("muted_colour") or theme["muted"])
     rule = colors.HexColor(theme["rule"])
+    font_scale = float(tokens.get("font_scale", 1.0))
     data = snapshot["document"]
     business = snapshot["business"]
     customer = snapshot["customer"]
@@ -49,12 +51,12 @@ def render_document_pdf(document):
     )
     base = getSampleStyleSheet()
     title = ParagraphStyle("DocTitle", parent=base["Title"], fontName="Helvetica-Bold",
-                           fontSize=23, leading=27, textColor=accent, alignment=TA_RIGHT, spaceAfter=4)
+                           fontSize=23 * font_scale, leading=27 * font_scale, textColor=accent, alignment=TA_RIGHT, spaceAfter=4)
     heading = ParagraphStyle("SectionHeading", parent=base["Heading3"], fontSize=9,
                              leading=12, textColor=muted, spaceAfter=4)
-    body = ParagraphStyle("BodySmall", parent=base["BodyText"], fontSize=8.5, leading=12)
+    body = ParagraphStyle("BodySmall", parent=base["BodyText"], fontSize=8.5 * font_scale, leading=12 * font_scale)
     right = ParagraphStyle("RightSmall", parent=body, alignment=TA_RIGHT)
-    small = ParagraphStyle("SmallMuted", parent=body, textColor=muted, fontSize=7.5)
+    small = ParagraphStyle("SmallMuted", parent=body, textColor=muted, fontSize=7.5 * font_scale)
     story = []
 
     logo_name = business.get("logo_storage_name")
