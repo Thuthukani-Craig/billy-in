@@ -18,6 +18,18 @@ def build_issued_snapshot(document):
         except ValueError:
             logo_name = ""
 
+    from .models import DocumentDesignProfile
+    profile = DocumentDesignProfile.objects.filter(business=business, document_type=document.document_type).first()
+    presentation = {
+        "theme": profile.theme if profile else "CLASSIC",
+        "primary_colour": (profile.primary_colour if profile and profile.primary_colour else business.primary_brand_colour) or "#2563EB",
+        "show_logo": profile.show_logo if profile else True,
+        "show_payment_details": profile.show_payment_details if profile else True,
+        "show_business_registration": profile.show_business_registration if profile else True,
+        "show_customer_vat_number": profile.show_customer_vat_number if profile else True,
+        "design_tokens": profile.design_tokens if profile else {},
+    }
+
     return {
         "schema_version": 1,
         "document": {
@@ -82,10 +94,7 @@ def build_issued_snapshot(document):
             "amount_paid": _money(document.amount_paid),
             "outstanding_balance": _money(document.outstanding_balance),
         },
-        "presentation": {
-            "theme": "CLASSIC",
-            "primary_colour": business.primary_brand_colour or "#2563EB",
-        },
+        "presentation": presentation,
         "captured_at": timezone.now().isoformat(),
     }
 
