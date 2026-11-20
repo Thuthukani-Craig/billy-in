@@ -4,8 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { getStoredActiveBusiness } from "@/lib/api";
-
 const navGroups = [
   { title: "Workspace", items: [{ href: "/", label: "Overview", icon: "◫" }, { href: "/businesses", label: "Businesses", icon: "▦" }, { href: "/customers", label: "Customers", icon: "♙" }] },
   { title: "Revenue", items: [{ href: "/quotations", label: "Quotations", icon: "▤" }, { href: "/invoices", label: "Invoices", icon: "▧" }, { href: "/receipts", label: "Receipts", icon: "▣" }, { href: "/payments", label: "Payments", icon: "↗" }] },
@@ -15,18 +13,6 @@ const navGroups = [
 
 export function LayoutShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const [activeBusinessName, setActiveBusinessName] = useState<string | null>(null);
-
-  useEffect(() => {
-    const syncActiveBusiness = () => {
-      const business = getStoredActiveBusiness();
-      setActiveBusinessName(business ? business.name : null);
-    };
-    syncActiveBusiness();
-    window.addEventListener("storage", syncActiveBusiness);
-    return () => window.removeEventListener("storage", syncActiveBusiness);
-  }, []);
-
   return (
     <div className="min-h-screen bg-[#f4f6fa] text-slate-900">
       <div className="mx-auto flex min-h-screen max-w-[1800px] flex-col lg:flex-row">
@@ -37,11 +23,11 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="px-4 py-5">
-            <div className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Current business</div>
+            <div className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Portfolio view</div>
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
               <div className="flex items-center gap-2.5">
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 text-xs font-bold text-blue-700">{activeBusinessName ? activeBusinessName.slice(0, 1).toUpperCase() : "—"}</span>
-                <div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-800">{activeBusinessName ?? "All businesses"}</p><p className="mt-0.5 text-[11px] text-slate-400">Business workspace</p></div>
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 text-xs font-bold text-blue-700">Σ</span>
+                <div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-800">All authorised businesses</p><p className="mt-0.5 text-[11px] text-slate-400">Combined workspace view</p></div>
               </div>
             </div>
           </div>
