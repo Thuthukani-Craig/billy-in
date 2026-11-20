@@ -1,7 +1,7 @@
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 
-from accounts.models import TenantMembership
+from accounts.tenant_context import resolve_request_tenant
 from .models import Business
 from .serializers import BusinessSerializer
 
