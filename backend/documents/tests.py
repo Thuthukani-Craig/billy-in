@@ -235,7 +235,7 @@ class QuotationWorkflowAPITest(TestCase):
             }],
         }
         ambiguous = self.client.post('/api/v1/documents/', payload, format='json')
-        self.assertEqual(ambiguous.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(ambiguous.status_code, status.HTTP_403_FORBIDDEN)
 
         selected = self.client.post(
             '/api/v1/documents/',
