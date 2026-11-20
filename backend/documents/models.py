@@ -208,3 +208,23 @@ class DocumentDesignProfile(models.Model):
         allowed_tokens = {"accent_colour", "muted_colour", "font_scale", "corner_style"}
         if set(self.design_tokens) - allowed_tokens:
             raise ValidationError({"design_tokens": "Only approved design tokens may be configured."})
+        for key in ("accent_colour", "muted_colour"):
+            value = self.design_tokens.get(key)
+            if value and not (
+                isinstance(value, str) and len(value) == 7 and value.startswith("#")
+                and all(ch in "0123456789abcdefABCDEF" for ch in value[1:])
+            ):
+                raise ValidationError({"design_tokens": f"{key} must be a six-digit hexadecimal colour."})
+        if "font_scale" in self.design_tokens:
+            try:
+                scale = float(self.design_tokens["font_scale"])
+            except (TypeError, ValueError):
+                raise ValidationError({"design_tokens": "font_scale must be a number between 0.8 and 1.2."})
+            if not 0.8 <= scale <= 1.2:
+                raise ValidationError({"design_tokens": "font_scale must be between 0.8 and 1.2."})
+        if self.design_tokens.get("corner_style", "square") not in ("square", "soft"):
+            raise ValidationError({"design_tokens": "corner_style must be square or soft."})
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
