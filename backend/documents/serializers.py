@@ -55,6 +55,26 @@ class DocumentSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({'payment': 'Receipt payment must belong to the same business and customer.'})
         if payment and business and payment.tenant_id != business.tenant_id:
             raise serializers.ValidationError({'payment': 'Receipt payment must belong to the selected tenant.'})
+        requested_status = data.get('status')
+        if self.instance is None:
+            if requested_status and requested_status not in (Document.STATUS_DRAFT, Document.STATUS_ISSUED):
+                raise serializers.ValidationError({'status': 'New documents must begin as draft or issued.'})
+            if document_type == 'RECEIPT' and requested_status not in (None, Document.STATUS_ISSUED):
+                raise serializers.ValidationError({'status': 'Receipts are created as issued records.'})
+        elif requested_status and requested_status != self.instance.status:
+            allowed = {
+                Document.DOCUMENT_TYPE_QUOTATION: {
+                    Document.STATUS_DRAFT: {Document.STATUS_ISSUED, Document.STATUS_CANCELLED},
+                    Document.STATUS_ISSUED: {Document.STATUS_ACCEPTED, Document.STATUS_REJECTED, Document.STATUS_EXPIRED, Document.STATUS_CANCELLED},
+                },
+                Document.DOCUMENT_TYPE_INVOICE: {
+                    Document.STATUS_DRAFT: {Document.STATUS_ISSUED, Document.STATUS_CANCELLED},
+                    Document.STATUS_ISSUED: {Document.STATUS_CANCELLED},
+                },
+            }
+            permitted = allowed.get(self.instance.document_type, {}).get(self.instance.status, set())
+            if requested_status not in permitted:
+                raise serializers.ValidationError({'status': 'This document status transition is not permitted.'})
         if self.instance and self.instance.document_type == 'RECEIPT':
             raise serializers.ValidationError('Issued receipt records cannot be edited.')
         return data
