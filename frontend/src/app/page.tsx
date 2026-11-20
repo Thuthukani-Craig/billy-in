@@ -79,14 +79,21 @@ export default function Home() {
   useEffect(() => {
     if (!session) return;
     let active = true;
-    setIsLoadingSummary(true);
-    setSummaryError("");
-    fetchJson<DashboardSummary>("/api/v1/reporting/dashboard/")
-      .then((payload) => { if (active) setSummary(payload); })
-      .catch((loadError) => {
+    const loadSummary = async () => {
+      await Promise.resolve();
+      if (!active) return;
+      setIsLoadingSummary(true);
+      setSummaryError("");
+      try {
+        const payload = await fetchJson<DashboardSummary>("/api/v1/reporting/dashboard/");
+        if (active) setSummary(payload);
+      } catch (loadError) {
         if (active) setSummaryError(loadError instanceof Error ? loadError.message : "Unable to load financial overview.");
-      })
-      .finally(() => { if (active) setIsLoadingSummary(false); });
+      } finally {
+        if (active) setIsLoadingSummary(false);
+      }
+    };
+    void loadSummary();
     return () => { active = false; };
   }, [session]);
 
