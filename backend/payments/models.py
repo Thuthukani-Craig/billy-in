@@ -41,6 +41,12 @@ class Payment(models.Model):
             raise ValidationError({'customer': 'Customer must belong to the same tenant as the payment.'})
         if self.invoice_id and self.tenant_id and self.invoice.tenant_id != self.tenant_id:
             raise ValidationError({'invoice': 'Invoice must belong to the same tenant as the payment.'})
+        if self.invoice_id and self.business_id and self.invoice.business_id != self.business_id:
+            raise ValidationError({'invoice': 'Invoice must belong to the same business as the payment.'})
+        if self.invoice_id and self.customer_id and self.invoice.customer_id != self.customer_id:
+            raise ValidationError({'invoice': 'Invoice customer must match the payment customer.'})
+        if self.amount <= Decimal('0.00'):
+            raise ValidationError({'amount': 'Payment amount must be greater than zero.'})
 
     def __str__(self):
         return f'{self.amount} for {self.customer.name}'
