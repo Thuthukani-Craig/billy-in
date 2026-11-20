@@ -291,3 +291,69 @@ class QuotationWorkflowAPITest(TestCase):
             }],
         }, format='json')
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+    def test_issued_document_snapshot_preserves_business_and_customer_facts(self):
+        response = self.client.post('/api/v1/documents/', {
+            'business': self.business.id,
+            'customer': self.customer.id,
+            'document_type': 'INVOICE',
+            'status': 'issued',
+            'issue_date': '2026-11-20',
+            'line_items': [{
+                'description': 'Original maintenance work',
+                'quantity': '1.00',
+                'unit_price': '1250.00',
+                'discount': '0.00',
+                'tax_rate': '0.00',
+            }],
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        from documents.models import Document
+        document = Document.objects.get(pk=response.data['id'])
+        original_snapshot = document.issued_snapshot
+        self.assertEqual(original_snapshot['business']['account_number'], '')
+        self.assertEqual(original_snapshot['customer']['name'], 'Apex Logistics')
+        self.assertEqual(original_snapshot['line_items'][0]['description'], 'Original maintenance work')
+        self.assertIsNotNone(document.issued_snapshot_at)
+
+        self.business.account_number = '1234567890'
+        self.business.banking_institution = 'Changed Bank'
+        self.business.save()
+        self.customer.name = 'Renamed Customer'
+        self.customer.save()
+        document.refresh_from_db()
+        self.assertEqual(document.issued_snapshot, original_snapshot)
+        self.assertEqual(document.issued_snapshot['business']['account_number'], '')
+        self.assertEqual(document.issued_snapshot['customer']['name'], 'Apex Logistics')
+
+    def test_issued_document_has_downloadable_pdf_endpoint(self):
+        response = self.client.post('/api/v1/documents/', {
+            'business': self.business.id,
+            'customer': self.customer.id,
+            'document_type': 'INVOICE',
+            'status': 'issued',
+            'issue_date': '2026-11-20',
+            'line_items': [{
+                'description': 'PDF test service',
+                'quantity': '1.00',
+                'unit_price': '750.00',
+                'discount': '0.00',
+                'tax_rate': '0.00',
+            }],
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        pdf_response = self.client.get(f"/api/v1/documents/{response.data['id']}/pdf/")
+        self.assertEqual(pdf_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(pdf_response['Content-Type'], 'application/pdf')
+        self.assertIn('attachment;', pdf_response['Content-Disposition'])
+        self.assertTrue(pdf_response.content.startswith(b'%PDF-'))
+
+    def test_design_profile_rejects_unapproved_css_tokens(self):
+        response = self.client.post('/api/v1/documents/design-profiles/', {
+            'business': self.business.id,
+            'document_type': 'INVOICE',
+            'theme': 'MODERN',
+            'design_tokens': {'custom_css': 'body { display: none; }'},
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
