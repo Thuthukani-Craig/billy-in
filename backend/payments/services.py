@@ -23,8 +23,8 @@ def record_payment(*, tenant, business, customer, amount, invoice=None, **fields
             raise DjangoValidationError({"invoice": "Invoice must belong to the selected tenant and business."})
         if locked_invoice.customer_id != customer.id:
             raise DjangoValidationError({"invoice": "Invoice customer must match the payment customer."})
-        if locked_invoice.status == Document.STATUS_CANCELLED:
-            raise DjangoValidationError({"invoice": "Cancelled invoices cannot receive payments."})
+        if locked_invoice.status not in (Document.STATUS_ISSUED, Document.STATUS_PARTIALLY_PAID, Document.STATUS_OVERDUE):
+            raise DjangoValidationError({"invoice": "Only issued invoices can receive payments."})
         if amount > locked_invoice.outstanding_balance:
             raise DjangoValidationError({"amount": "Payment exceeds the invoice's outstanding balance."})
 
