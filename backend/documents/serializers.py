@@ -51,7 +51,7 @@ class DocumentSerializer(serializers.ModelSerializer):
         payment = data.get('payment', getattr(self.instance, 'payment', None))
         if document_type == 'RECEIPT' and payment is None:
             raise serializers.ValidationError({'payment': 'Receipts must be linked to an actual payment record.'})
-        if payment and business and (payment.business_id != business.id or payment.customer_id != customer.id):
+        if payment and (business is None or customer is None or payment.business_id != business.id or payment.customer_id != customer.id):
             raise serializers.ValidationError({'payment': 'Receipt payment must belong to the same business and customer.'})
         if payment and business and payment.tenant_id != business.tenant_id:
             raise serializers.ValidationError({'payment': 'Receipt payment must belong to the selected tenant.'})
