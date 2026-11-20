@@ -195,3 +195,52 @@ class QuotationWorkflowAPITest(TestCase):
         response = self.client.get('/api/v1/documents/', {'business_id': other_business.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['count'], 0)
+
+
+    def test_invoice_numbering_uses_invoice_sequence(self):
+        response = self.client.post('/api/v1/documents/', {
+            'business': self.business.id,
+            'customer': self.customer.id,
+            'document_type': 'INVOICE',
+            'status': 'issued',
+            'issue_date': '2026-11-20',
+            'line_items': [{
+                'description': 'Maintenance service',
+                'quantity': '1.00',
+                'unit_of_measure': 'job',
+                'unit_price': '1000.00',
+                'discount': '0.00',
+                'tax_rate': '0.00',
+            }],
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(response.data['document_number'], 'MEGG-INV-0001')
+
+    def test_multiple_tenant_memberships_require_explicit_selection_for_writes(self):
+        second_tenant = Tenant.objects.create(name='Second Tenant', slug='second-tenant')
+        TenantMembership.objects.create(user=self.user, tenant=second_tenant, role=TenantMembership.ROLE_MANAGER)
+
+        payload = {
+            'business': self.business.id,
+            'customer': self.customer.id,
+            'document_type': 'QUOTATION',
+            'status': 'draft',
+            'issue_date': '2026-11-20',
+            'line_items': [{
+                'description': 'Design work',
+                'quantity': '1.00',
+                'unit_price': '500.00',
+                'discount': '0.00',
+                'tax_rate': '0.00',
+            }],
+        }
+        ambiguous = self.client.post('/api/v1/documents/', payload, format='json')
+        self.assertEqual(ambiguous.status_code, status.HTTP_400_BAD_REQUEST)
+
+        selected = self.client.post(
+            '/api/v1/documents/',
+            payload,
+            format='json',
+            HTTP_X_TENANT_ID=str(self.tenant.id),
+        )
+        self.assertEqual(selected.status_code, status.HTTP_201_CREATED, selected.data)
