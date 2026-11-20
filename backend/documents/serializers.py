@@ -160,6 +160,11 @@ class DocumentDesignProfileSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "updated_at"]
 
+    def validate_primary_colour(self, value):
+        if value and (len(value) != 7 or not value.startswith("#") or any(ch not in "0123456789abcdefABCDEF" for ch in value[1:])):
+            raise serializers.ValidationError("Use a six-digit hexadecimal colour such as #2563EB.")
+        return value
+
     def validate_design_tokens(self, value):
         allowed = {"accent_colour", "muted_colour", "font_scale", "corner_style"}
         if not isinstance(value, dict) or set(value) - allowed:
