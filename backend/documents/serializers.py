@@ -4,6 +4,7 @@ from rest_framework import serializers
 from accounts.tenant_context import resolve_request_tenant
 from businesses.models import Business
 from .models import Document, DocumentLineItem
+from .snapshots import capture_issued_snapshot
 
 
 class DocumentLineItemSerializer(serializers.ModelSerializer):
@@ -126,6 +127,8 @@ class DocumentSerializer(serializers.ModelSerializer):
         for item_data in line_items_data:
             DocumentLineItem.objects.create(document=document, **item_data)
         document.refresh_from_db()
+        if document.status != Document.STATUS_DRAFT:
+            capture_issued_snapshot(document)
         return document
 
     @transaction.atomic
@@ -141,4 +144,6 @@ class DocumentSerializer(serializers.ModelSerializer):
             for item_data in line_items_data:
                 DocumentLineItem.objects.create(document=instance, **item_data)
         instance.save()
+        if instance.status != Document.STATUS_DRAFT:
+            capture_issued_snapshot(instance)
         return instance
