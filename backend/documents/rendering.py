@@ -81,7 +81,7 @@ def render_document_pdf(document):
     header = Table([[logo, [_p(data["type"].replace("_", " "), title),
                              _p(data["number"], right),
                              _p(f'Issued: {data.get("issue_date") or "—"}', right),
-                             _p(f'Due: {data.get("due_date") or "—"}', right)]]],
+                             _p(f'{"Expires" if data["type"] == "QUOTATION" else "Due"}: {data.get("due_date") or "—"}', right)]]],
                    colWidths=[90 * mm, 84 * mm])
     header.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
@@ -136,13 +136,16 @@ def render_document_pdf(document):
     story.extend([items_table, Spacer(1, 6 * mm)])
 
     summary_rows = [
-        [_p("Subtotal", body), _p(f'R {Decimal(totals["subtotal"]):,.2f}', right)],
-        [_p("Discount", body), _p(f'- R {Decimal(totals["discount_amount"]):,.2f}', right)],
-        [_p("Tax", body), _p(f'R {Decimal(totals["tax_amount"]):,.2f}', right)],
-        [_p("TOTAL", heading), _p(f'R {Decimal(totals["total"]):,.2f}', right)],
-        [_p("Paid", body), _p(f'R {Decimal(totals["amount_paid"]):,.2f}', right)],
-        [_p("Balance due", heading), _p(f'R {Decimal(totals["outstanding_balance"]):,.2f}', right)],
+        [_p("Subtotal", body), _p(f"R {Decimal(totals['subtotal']):,.2f}", right)],
+        [_p("Discount", body), _p(f"- R {Decimal(totals['discount_amount']):,.2f}", right)],
+        [_p("Tax", body), _p(f"R {Decimal(totals['tax_amount']):,.2f}", right)],
+        [_p("TOTAL", heading), _p(f"R {Decimal(totals['total']):,.2f}", right)],
     ]
+    if data["type"] in ("INVOICE", "RECEIPT"):
+        summary_rows.extend([
+            [_p("Paid", body), _p(f"R {Decimal(totals['amount_paid']):,.2f}", right)],
+            [_p("Balance due", heading), _p(f"R {Decimal(totals['outstanding_balance']):,.2f}", right)],
+        ])
     summary = Table(summary_rows, colWidths=[42 * mm, 38 * mm], hAlign="RIGHT")
     summary.setStyle(TableStyle([
         ("LINEABOVE", (0, 3), (-1, 3), 1.2, accent),
