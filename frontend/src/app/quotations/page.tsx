@@ -300,12 +300,16 @@ export default function QuotationsPage() {
           body: JSON.stringify(profilePayload),
         });
       }
-      const result = await fetchJson<DocumentResponse>("/api/v1/documents/", {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
+      const existingDraft = createdDocument?.status === "draft";
+      const result = await fetchJson<DocumentResponse>(
+        existingDraft ? `/api/v1/documents/${createdDocument.id}/` : "/api/v1/documents/",
+        {
+          method: existingDraft ? "PATCH" : "POST",
+          body: JSON.stringify(payload),
+        },
+      );
       setCreatedDocument(result);
-      setDocuments((current) => [result as HistoryDocument, ...current]);
+      setDocuments((current) => [result as HistoryDocument, ...current.filter((item) => item.id !== result.id)]);
       setMessage(status === "issued" ? `Quotation ${result.document_number} issued. Your PDF is ready.` : `Quotation saved successfully as ${result.document_number}.`);
       if (status === "issued") {
         try {
