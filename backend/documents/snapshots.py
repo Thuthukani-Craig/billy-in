@@ -1,5 +1,9 @@
 from decimal import Decimal
+from pathlib import PurePosixPath
+from uuid import uuid4
 
+from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
 from django.utils import timezone
 
 
@@ -14,8 +18,15 @@ def build_issued_snapshot(document):
     logo_name = ""
     if business.logo:
         try:
-            logo_name = business.logo.name
-        except ValueError:
+            business.logo.open("rb")
+            try:
+                logo_bytes = business.logo.read()
+            finally:
+                business.logo.close()
+            original_name = PurePosixPath(business.logo.name).name
+            immutable_name = f"document_snapshots/{document.tenant_id}/{document.pk}/{uuid4().hex}_{original_name}"
+            logo_name = default_storage.save(immutable_name, ContentFile(logo_bytes))
+        except (ValueError, OSError):
             logo_name = ""
 
     from .models import DocumentDesignProfile
