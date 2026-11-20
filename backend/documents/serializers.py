@@ -48,8 +48,13 @@ class DocumentSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({'business': 'Business must belong to the selected tenant.'})
             if customer and customer.tenant_id != tenant.id:
                 raise serializers.ValidationError({'customer': 'Customer must belong to the selected tenant.'})
-        if document_type == 'RECEIPT' and not data.get('payment', getattr(self.instance, 'payment', None)):
+        payment = data.get('payment', getattr(self.instance, 'payment', None))
+        if document_type == 'RECEIPT' and payment is None:
             raise serializers.ValidationError({'payment': 'Receipts must be linked to an actual payment record.'})
+        if payment and business and (payment.business_id != business.id or payment.customer_id != customer.id):
+            raise serializers.ValidationError({'payment': 'Receipt payment must belong to the same business and customer.'})
+        if payment and business and payment.tenant_id != business.tenant_id:
+            raise serializers.ValidationError({'payment': 'Receipt payment must belong to the selected tenant.'})
         if self.instance and self.instance.document_type == 'RECEIPT':
             raise serializers.ValidationError('Issued receipt records cannot be edited.')
         return data
