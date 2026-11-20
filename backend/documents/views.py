@@ -1,10 +1,13 @@
+from django.http import HttpResponse
 from rest_framework import viewsets
+from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 
 from accounts.tenant_context import resolve_request_tenant
 from accounts.permissions import TenantWorkspacePermission
 from .models import Document
 from .serializers import DocumentSerializer
+from .rendering import render_document_pdf
 
 
 class DocumentViewSet(viewsets.ModelViewSet):
@@ -24,3 +27,16 @@ class DocumentViewSet(viewsets.ModelViewSet):
         if document_type:
             queryset = queryset.filter(document_type=document_type)
         return queryset
+
+    @action(detail=True, methods=['get'], url_path='pdf')
+    def pdf(self, request, pk=None):
+        document = self.get_object()
+        if not document.issued_snapshot:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError('Only issued documents with a preserved snapshot can be downloaded as PDF.')
+        pdf_bytes = render_document_pdf(document)
+        filename = f"{document.document_number}.pdf".replace('"', '').replace('\\\\', '')
+        response = HttpResponse(pdf_bytes, content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        response['Content-Length'] = str(len(pdf_bytes))
+        return response
