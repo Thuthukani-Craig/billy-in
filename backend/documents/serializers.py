@@ -107,6 +107,18 @@ class DocumentSerializer(serializers.ModelSerializer):
             validated_data['tenant'] = tenant
 
         line_items_data = validated_data.pop('line_items', [])
+        if validated_data.get('document_type') == Document.DOCUMENT_TYPE_RECEIPT:
+            payment = validated_data.get('payment')
+            validated_data.setdefault('status', Document.STATUS_ISSUED)
+            validated_data['amount_paid'] = payment.amount
+            if not line_items_data:
+                line_items_data = [{
+                    'description': f"Payment received ({payment.reference or payment.pk})",
+                    'quantity': 1,
+                    'unit_price': payment.amount,
+                    'discount': 0,
+                    'tax_rate': 0,
+                }]
         document = Document(**validated_data)
         if not document.document_number:
             document.document_number = self._generate_document_number(document.business, document.document_type)
