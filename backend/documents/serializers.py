@@ -3,7 +3,7 @@ from rest_framework import serializers
 
 from accounts.tenant_context import resolve_request_tenant
 from businesses.models import Business
-from .models import Document, DocumentLineItem
+from .models import Document, DocumentLineItem, DocumentDesignProfile
 from .snapshots import capture_issued_snapshot
 
 
@@ -147,3 +147,24 @@ class DocumentSerializer(serializers.ModelSerializer):
         if instance.status != Document.STATUS_DRAFT:
             capture_issued_snapshot(instance)
         return instance
+
+
+
+class DocumentDesignProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DocumentDesignProfile
+        fields = [
+            "id", "business", "document_type", "theme", "primary_colour",
+            "show_logo", "show_payment_details", "show_business_registration",
+            "show_customer_vat_number", "design_tokens", "updated_at",
+        ]
+        read_only_fields = ["id", "updated_at"]
+
+    def validate(self, data):
+        business = data.get("business") or getattr(self.instance, "business", None)
+        request = self.context.get("request")
+        if request and business:
+            tenant = resolve_request_tenant(request)
+            if business.tenant_id != tenant.id:
+                raise serializers.ValidationError({"business": "Business must belong to the selected tenant."})
+        return data
