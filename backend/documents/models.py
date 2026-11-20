@@ -137,7 +137,21 @@ class DocumentLineItem(models.Model):
     def __str__(self):
         return self.description
 
+    def clean(self):
+        super().clean()
+        if self.quantity <= Decimal('0.00'):
+            raise ValidationError({'quantity': 'Quantity must be greater than zero.'})
+        if self.unit_price < Decimal('0.00'):
+            raise ValidationError({'unit_price': 'Unit price cannot be negative.'})
+        if self.discount < Decimal('0.00'):
+            raise ValidationError({'discount': 'Discount cannot be negative.'})
+        if self.discount > self.quantity * self.unit_price:
+            raise ValidationError({'discount': 'Discount cannot exceed the line subtotal.'})
+        if self.tax_rate < Decimal('0.00') or self.tax_rate > Decimal('100.00'):
+            raise ValidationError({'tax_rate': 'Tax rate must be between 0 and 100.'})
+
     def save(self, *args, **kwargs):
+        self.full_clean()
         subtotal = self.quantity * self.unit_price
         discount_amount = self.discount
         taxable_value = subtotal - discount_amount
