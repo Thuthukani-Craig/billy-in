@@ -52,8 +52,8 @@ def render_document_pdf(document):
     base = getSampleStyleSheet()
     title = ParagraphStyle("DocTitle", parent=base["Title"], fontName="Helvetica-Bold",
                            fontSize=23 * font_scale, leading=27 * font_scale, textColor=accent, alignment=TA_RIGHT, spaceAfter=4)
-    heading = ParagraphStyle("SectionHeading", parent=base["Heading3"], fontSize=9,
-                             leading=12, textColor=muted, spaceAfter=4)
+    heading = ParagraphStyle("SectionHeading", parent=base["Heading3"], fontSize=9 * font_scale,
+                             leading=12 * font_scale, textColor=muted, spaceAfter=4)
     body = ParagraphStyle("BodySmall", parent=base["BodyText"], fontSize=8.5 * font_scale, leading=12 * font_scale)
     right = ParagraphStyle("RightSmall", parent=body, alignment=TA_RIGHT)
     small = ParagraphStyle("SmallMuted", parent=body, textColor=muted, fontSize=7.5 * font_scale)
@@ -90,9 +90,6 @@ def render_document_pdf(document):
         ("LINEBELOW", (0, 0), (-1, -1), 1.5, accent),
     ]))
     story.extend([header, Spacer(1, 7 * mm)])
-    story.extend(business_block)
-    story.append(Spacer(1, 5 * mm))
-
     customer_lines = [customer.get("name"), customer.get("contact_person"),
                       customer.get("billing_address") or customer.get("physical_address"),
                       customer.get("email"), customer.get("telephone"),
