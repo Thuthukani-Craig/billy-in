@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { LayoutShell } from "@/components/layout-shell";
@@ -39,13 +40,15 @@ function MetricCard({ label, value, caption, accent }: { label: string; value: s
 
 function StatusPill({ status }: { status: string }) {
   const normalized = status.toLowerCase().replaceAll("_", " ");
-  const styles = normalized.includes("paid")
+  const styles = normalized === "paid" || normalized === "accepted"
     ? "bg-emerald-50 text-emerald-700"
-    : normalized.includes("overdue") || normalized.includes("reject")
+    : normalized.includes("overdue") || normalized.includes("reject") || normalized.includes("cancel")
       ? "bg-rose-50 text-rose-700"
       : normalized.includes("draft")
         ? "bg-slate-100 text-slate-600"
-        : "bg-blue-50 text-blue-700";
+        : normalized.includes("partial")
+          ? "bg-amber-50 text-amber-700"
+          : "bg-blue-50 text-blue-700";
   return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium capitalize ${styles}`}>{normalized}</span>;
 }
 
@@ -187,7 +190,7 @@ export default function Home() {
           <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white">
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
               <div><h3 className="font-semibold text-slate-950">Recent invoices</h3><p className="mt-1 text-xs text-slate-400">Latest invoice activity</p></div>
-              <a href="/invoices" className="text-sm font-medium text-blue-600 hover:text-blue-700">View invoices →</a>
+              <Link href="/invoices" className="text-sm font-medium text-blue-600 hover:text-blue-700">View invoices →</Link>
             </div>
             {summary?.recent_invoices.length ? (
               <div className="divide-y divide-slate-100">
