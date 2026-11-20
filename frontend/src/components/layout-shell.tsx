@@ -2,8 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
-
 const navGroups = [
   { title: "Workspace", items: [{ href: "/", label: "Overview", icon: "◫" }, { href: "/businesses", label: "Businesses", icon: "▦" }, { href: "/customers", label: "Customers", icon: "♙" }] },
   { title: "Revenue", items: [{ href: "/quotations", label: "Quotations", icon: "▤" }, { href: "/invoices", label: "Invoices", icon: "▧" }, { href: "/receipts", label: "Receipts", icon: "▣" }, { href: "/payments", label: "Payments", icon: "↗" }] },
