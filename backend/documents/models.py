@@ -49,6 +49,8 @@ class Document(models.Model):
     issue_date = models.DateField(null=True, blank=True)
     due_date = models.DateField(null=True, blank=True)
     notes = models.TextField(blank=True)
+    issued_snapshot = models.JSONField(default=dict, blank=True, editable=False)
+    issued_snapshot_at = models.DateTimeField(null=True, blank=True, editable=False)
     subtotal = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
     discount_amount = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
     tax_amount = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
@@ -78,10 +80,21 @@ class Document(models.Model):
             raise ValidationError({'customer': 'Customer must belong to the same tenant as the document.'})
         if self.document_type == self.DOCUMENT_TYPE_RECEIPT and self.payment is None:
             raise ValidationError({'payment': 'Receipts must be linked to a payment record.'})
+        if self.payment_id and self.tenant_id and self.payment.tenant_id != self.tenant_id:
+            raise ValidationError({'payment': 'Payment must belong to the same tenant as the receipt.'})
+        if self.payment_id and self.business_id and self.payment.business_id != self.business_id:
+            raise ValidationError({'payment': 'Payment must belong to the same business as the receipt.'})
+        if self.payment_id and self.customer_id and self.payment.customer_id != self.customer_id:
+            raise ValidationError({'payment': 'Payment customer must match the receipt customer.'})
 
     def save(self, *args, **kwargs):
         self.full_clean()
+        if self.pk:
+            original_snapshot = type(self).objects.filter(pk=self.pk).values_list("issued_snapshot", flat=True).first()
+            if original_snapshot and self.issued_snapshot != original_snapshot:
+                raise ValidationError({"issued_snapshot": "An issued document snapshot is immutable."})
         is_new = self.pk is None
+        requested_update_fields = kwargs.pop('update_fields', None)
         if is_new:
             super().save(*args, **kwargs)
 
@@ -91,7 +104,13 @@ class Document(models.Model):
         self.total = self.calculate_total()
         self.outstanding_balance = self.total - self.amount_paid
 
-        super().save(update_fields=['subtotal', 'discount_amount', 'tax_amount', 'total', 'outstanding_balance', 'updated_at'])
+        calculated_fields = {
+            'subtotal', 'discount_amount', 'tax_amount', 'total',
+            'outstanding_balance', 'updated_at',
+        }
+        if requested_update_fields is not None:
+            calculated_fields.update(requested_update_fields)
+        super().save(update_fields=list(calculated_fields))
 
     def calculate_subtotal(self):
         return sum((item.line_subtotal for item in self.line_items.all()), Decimal('0.00'))
@@ -124,7 +143,21 @@ class DocumentLineItem(models.Model):
     def __str__(self):
         return self.description
 
+    def clean(self):
+        super().clean()
+        if self.quantity <= Decimal('0.00'):
+            raise ValidationError({'quantity': 'Quantity must be greater than zero.'})
+        if self.unit_price < Decimal('0.00'):
+            raise ValidationError({'unit_price': 'Unit price cannot be negative.'})
+        if self.discount < Decimal('0.00'):
+            raise ValidationError({'discount': 'Discount cannot be negative.'})
+        if self.discount > self.quantity * self.unit_price:
+            raise ValidationError({'discount': 'Discount cannot exceed the line subtotal.'})
+        if self.tax_rate < Decimal('0.00') or self.tax_rate > Decimal('100.00'):
+            raise ValidationError({'tax_rate': 'Tax rate must be between 0 and 100.'})
+
     def save(self, *args, **kwargs):
+        self.full_clean()
         subtotal = self.quantity * self.unit_price
         discount_amount = self.discount
         taxable_value = subtotal - discount_amount
@@ -135,3 +168,67 @@ class DocumentLineItem(models.Model):
         self.line_total = total
         super().save(*args, **kwargs)
         self.document.save()
+
+
+class DocumentDesignProfile(models.Model):
+    THEME_CLASSIC = "CLASSIC"
+    THEME_MODERN = "MODERN"
+    THEME_MINIMAL = "MINIMAL"
+    THEME_CORPORATE = "CORPORATE"
+    THEME_BOLD = "BOLD"
+    THEME_INDUSTRIAL = "INDUSTRIAL"
+    THEME_CHOICES = [
+        (THEME_CLASSIC, "Classic"),
+        (THEME_MODERN, "Modern"),
+        (THEME_MINIMAL, "Minimal"),
+        (THEME_CORPORATE, "Corporate"),
+        (THEME_BOLD, "Bold"),
+        (THEME_INDUSTRIAL, "Industrial"),
+    ]
+
+    business = models.ForeignKey(Business, related_name="document_design_profiles", on_delete=models.CASCADE)
+    document_type = models.CharField(max_length=20, choices=Document.DOCUMENT_TYPE_CHOICES)
+    theme = models.CharField(max_length=20, choices=THEME_CHOICES, default=THEME_CLASSIC)
+    primary_colour = models.CharField(max_length=7, blank=True)
+    show_logo = models.BooleanField(default=True)
+    show_payment_details = models.BooleanField(default=True)
+    show_business_registration = models.BooleanField(default=True)
+    show_customer_vat_number = models.BooleanField(default=True)
+    design_tokens = models.JSONField(default=dict, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["business", "document_type"], name="unique_business_document_design"),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.primary_colour and not (
+            len(self.primary_colour) == 7 and self.primary_colour.startswith("#")
+            and all(ch in "0123456789abcdefABCDEF" for ch in self.primary_colour[1:])
+        ):
+            raise ValidationError({"primary_colour": "Use a six-digit hexadecimal colour such as #2563EB."})
+        allowed_tokens = {"accent_colour", "muted_colour", "font_scale", "corner_style"}
+        if set(self.design_tokens) - allowed_tokens:
+            raise ValidationError({"design_tokens": "Only approved design tokens may be configured."})
+        for key in ("accent_colour", "muted_colour"):
+            value = self.design_tokens.get(key)
+            if value and not (
+                isinstance(value, str) and len(value) == 7 and value.startswith("#")
+                and all(ch in "0123456789abcdefABCDEF" for ch in value[1:])
+            ):
+                raise ValidationError({"design_tokens": f"{key} must be a six-digit hexadecimal colour."})
+        if "font_scale" in self.design_tokens:
+            try:
+                scale = float(self.design_tokens["font_scale"])
+            except (TypeError, ValueError):
+                raise ValidationError({"design_tokens": "font_scale must be a number between 0.8 and 1.2."})
+            if not 0.8 <= scale <= 1.2:
+                raise ValidationError({"design_tokens": "font_scale must be between 0.8 and 1.2."})
+        if self.design_tokens.get("corner_style", "square") not in ("square", "soft"):
+            raise ValidationError({"design_tokens": "corner_style must be square or soft."})
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)

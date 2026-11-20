@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { LayoutShell } from "@/components/layout-shell";
-import { fetchJson } from "@/lib/api";
+import { API_BASE_URL, fetchJson, getCsrfToken } from "@/lib/api";
 
 type Business = {
   id: number;
@@ -53,6 +53,8 @@ type DocumentResponse = {
 };
 
 type HistoryDocument = DocumentResponse & { created_at: string };
+type DocumentTheme = "CLASSIC" | "MODERN" | "MINIMAL" | "CORPORATE" | "BOLD" | "INDUSTRIAL";
+type DesignProfile = { id: number; business: number; document_type: string; theme: DocumentTheme };
 
 const emptyLineItem = (): LineItem => ({
   description: "",
@@ -77,6 +79,7 @@ export default function QuotationsPage() {
   const [documents, setDocuments] = useState<HistoryDocument[]>([]);
   const [selectedBusinessId, setSelectedBusinessId] = useState<string>("");
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
+  const [selectedTheme, setSelectedTheme] = useState<DocumentTheme>("CLASSIC");
   const [notes, setNotes] = useState("");
   const [issueDate, setIssueDate] = useState(() =>
     typeof window === "undefined" ? "" : new Date().toISOString().slice(0, 10),
@@ -143,6 +146,21 @@ export default function QuotationsPage() {
 
     void loadCustomers();
     void loadDocuments();
+  }, [selectedBusinessId]);
+
+  useEffect(() => {
+    if (!selectedBusinessId) return;
+    const loadDesignProfile = async () => {
+      try {
+        const payload = await fetchJson<DesignProfile[] | { results: DesignProfile[] }>(`/api/v1/documents/design-profiles/?business_id=${selectedBusinessId}`);
+        const profiles = Array.isArray(payload) ? payload : payload.results;
+        const quotationProfile = profiles.find((profile) => profile.document_type === "QUOTATION");
+        setSelectedTheme(quotationProfile?.theme ?? "CLASSIC");
+      } catch {
+        setSelectedTheme("CLASSIC");
+      }
+    };
+    void loadDesignProfile();
   }, [selectedBusinessId]);
 
   const subtotal = useMemo(
@@ -221,7 +239,27 @@ export default function QuotationsPage() {
     }
   };
 
-  const handleSubmit = async () => {
+  const downloadPdf = async (documentId: number, documentNumber: string) => {
+    const headers = new Headers();
+    const csrfToken = getCsrfToken();
+    if (csrfToken) headers.set("X-CSRFToken", csrfToken);
+    const response = await fetch(`${API_BASE_URL}/api/v1/documents/${documentId}/pdf/`, { credentials: "include", headers });
+    if (!response.ok) {
+      const detail = await response.text();
+      throw new Error(detail || "Unable to generate the PDF.");
+    }
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = objectUrl;
+    anchor.download = `${documentNumber}.pdf`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+  };
+
+  const handleSubmit = async (status: "draft" | "issued" = "draft") => {
     if (!selectedBusinessId || !selectedCustomerId) {
       setError("Please select a business and customer before saving the quotation.");
       return;
@@ -231,7 +269,7 @@ export default function QuotationsPage() {
       business: Number(selectedBusinessId),
       customer: Number(selectedCustomerId),
       document_type: "QUOTATION",
-      status: "draft",
+      status,
       issue_date: issueDate,
       due_date: dueDate || null,
       notes,
@@ -252,13 +290,34 @@ export default function QuotationsPage() {
     setIsSubmitting(true);
 
     try {
-      const result = await fetchJson<DocumentResponse>("/api/v1/documents/", {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
+      if (status === "issued") {
+        const existingProfiles = await fetchJson<DesignProfile[] | { results: DesignProfile[] }>(`/api/v1/documents/design-profiles/?business_id=${selectedBusinessId}`);
+        const profiles = Array.isArray(existingProfiles) ? existingProfiles : existingProfiles.results;
+        const existing = profiles.find((profile) => profile.document_type === "QUOTATION");
+        const profilePayload = { business: Number(selectedBusinessId), document_type: "QUOTATION", theme: selectedTheme };
+        await fetchJson<DesignProfile>(existing ? `/api/v1/documents/design-profiles/${existing.id}/` : "/api/v1/documents/design-profiles/", {
+          method: existing ? "PATCH" : "POST",
+          body: JSON.stringify(profilePayload),
+        });
+      }
+      const existingDraft = createdDocument?.status === "draft";
+      const result = await fetchJson<DocumentResponse>(
+        existingDraft ? `/api/v1/documents/${createdDocument.id}/` : "/api/v1/documents/",
+        {
+          method: existingDraft ? "PATCH" : "POST",
+          body: JSON.stringify(payload),
+        },
+      );
       setCreatedDocument(result);
-      setDocuments((current) => [result as HistoryDocument, ...current]);
-      setMessage(`Quotation saved successfully as ${result.document_number}.`);
+      setDocuments((current) => [result as HistoryDocument, ...current.filter((item) => item.id !== result.id)]);
+      setMessage(status === "issued" ? `Quotation ${result.document_number} issued. Your PDF is ready.` : `Quotation saved successfully as ${result.document_number}.`);
+      if (status === "issued") {
+        try {
+          await downloadPdf(result.id, result.document_number);
+        } catch (downloadError) {
+          setError(`Quotation was issued, but its PDF could not be downloaded: ${downloadError instanceof Error ? downloadError.message : "Unknown error"}`);
+        }
+      }
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Unable to save quotation.");
     } finally {
@@ -274,14 +333,14 @@ export default function QuotationsPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Quotations</p>
             <h2 className="mt-1 text-3xl font-semibold text-slate-900">Quotation builder</h2>
           </div>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={isSubmitting}
-            className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400"
-          >
-            {isSubmitting ? "Saving..." : "Save quotation"}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => handleSubmit("draft")} disabled={isSubmitting} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50">
+              {isSubmitting ? "Saving..." : "Save draft"}
+            </button>
+            <button type="button" onClick={() => handleSubmit("issued")} disabled={isSubmitting} className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400">
+              {isSubmitting ? "Processing..." : "Issue & download PDF"}
+            </button>
+          </div>
         </div>
 
         {error ? <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div> : null}
@@ -323,6 +382,18 @@ export default function QuotationsPage() {
                 </div>
               </div>
 
+              <div className="mt-4">
+                <label className="mb-1.5 block text-sm font-medium text-slate-600">Document design</label>
+                <select value={selectedTheme} onChange={(event) => setSelectedTheme(event.target.value as DocumentTheme)} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none transition focus:border-blue-500">
+                  <option value="CLASSIC">Classic — timeless and balanced</option>
+                  <option value="MODERN">Modern — crisp and contemporary</option>
+                  <option value="MINIMAL">Minimal — clean and restrained</option>
+                  <option value="CORPORATE">Corporate — formal and structured</option>
+                  <option value="BOLD">Bold — confident and expressive</option>
+                  <option value="INDUSTRIAL">Industrial — strong and utilitarian</option>
+                </select>
+                <p className="mt-1.5 text-xs text-slate-500">This theme is captured when the quotation is issued. Existing issued documents keep their original design.</p>
+              </div>
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-slate-600">Issue date</label>
@@ -438,7 +509,7 @@ export default function QuotationsPage() {
             </div>
 
             <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/50">
-              <h3 className="text-lg font-semibold text-slate-900">Printed preview</h3>
+              <h3 className="text-lg font-semibold text-slate-900">Document preview</h3>
               <div className="print-shell mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <div className="print-page rounded-2xl bg-white p-6 shadow-sm">
                   <div className="mb-5 flex items-start justify-between border-b border-slate-200 pb-4">
@@ -494,9 +565,7 @@ export default function QuotationsPage() {
                 </div>
               </div>
 
-              <button type="button" onClick={() => window.print()} className="mt-6 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50">
-                Print / save as PDF
-              </button>
+              <p className="mt-5 text-xs leading-5 text-slate-500">Review the draft here. Once issued, Billy-in generates a downloadable PDF from the preserved document snapshot.</p>
             </div>
 
             <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/50">
@@ -516,6 +585,7 @@ export default function QuotationsPage() {
                         <span>{document.issue_date}</span>
                         <span>{formatCurrency(Number(document.total || 0))}</span>
                       </div>
+                      {document.status !== "draft" ? <button type="button" onClick={() => downloadPdf(document.id, document.document_number).catch((downloadError) => setError(downloadError instanceof Error ? downloadError.message : "Unable to download PDF."))} className="mt-3 text-xs font-semibold text-blue-700 hover:text-blue-800">Download PDF ↓</button> : null}
                     </div>
                   ))
                 )}

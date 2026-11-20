@@ -1,79 +1,117 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { LayoutShell } from "@/components/layout-shell";
-import { StatCard } from "@/components/stat-card";
 import { API_BASE_URL, AuthSession, ensureCsrfCookie, fetchJson } from "@/lib/api";
 
-const recentInvoices = [
-  { id: "INV-1001", customer: "Northwind Solutions", total: "R 18,450.00", status: "Paid" },
-  { id: "INV-1004", customer: "Harbor Property Group", total: "R 7,200.00", status: "Partially paid" },
-  { id: "INV-1009", customer: "Summit Logistics", total: "R 23,900.00", status: "Overdue" },
-];
+type DashboardSummary = {
+  business_count: number;
+  active_business_count: number;
+  customer_count: number;
+  total_invoiced: number | string;
+  total_payments_received: number | string;
+  outstanding_balances: number | string;
+  overdue_invoices: number;
+  recent_invoices: Array<{ id: number; document_number: string; customer_name: string; total: number | string; status: string; created_at: string }>;
+  recent_quotations: Array<{ id: number; document_number: string; customer_name: string; total: number | string; status: string; created_at: string }>;
+  recent_payments: Array<{ id: number; customer_name: string; amount: number | string; payment_method: string; payment_date: string }>;
+};
 
-const recentQuotations = [
-  { id: "QUO-0047", customer: "Crest Homes", total: "R 12,750.00", status: "Issued" },
-  { id: "QUO-0012", customer: "Fieldstone Retail", total: "R 5,600.00", status: "Accepted" },
-  { id: "QUO-0008", customer: "Mandla Build", total: "R 9,390.00", status: "Draft" },
-];
+const money = (value: number | string) =>
+  new Intl.NumberFormat("en-ZA", { style: "currency", currency: "ZAR", maximumFractionDigits: 2 }).format(Number(value || 0));
 
-const recentPayments = [
-  { id: "PAY-1024", customer: "Northwind Solutions", amount: "R 18,450.00", method: "Bank transfer" },
-  { id: "PAY-1025", customer: "Harbor Property Group", amount: "R 4,200.00", method: "Card" },
-  { id: "PAY-1026", customer: "Khayelitsha Services", amount: "R 3,150.00", method: "Cash" },
-];
+const dateLabel = (value: string) =>
+  new Intl.DateTimeFormat("en-ZA", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(value));
+
+function MetricCard({ label, value, caption, accent }: { label: string; value: string; caption: string; accent: string }) {
+  return (
+    <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_2px_12px_rgba(15,23,42,0.025)]">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-medium text-slate-500">{label}</p>
+        <span className={`h-2 w-2 rounded-full ${accent}`} />
+      </div>
+      <p className="mt-4 text-2xl font-semibold tracking-tight text-slate-950 sm:text-[1.8rem]">{value}</p>
+      <p className="mt-2 text-xs text-slate-400">{caption}</p>
+    </section>
+  );
+}
+
+function StatusPill({ status }: { status: string }) {
+  const normalized = status.toLowerCase().replaceAll("_", " ");
+  const styles = normalized === "paid" || normalized === "accepted"
+    ? "bg-emerald-50 text-emerald-700"
+    : normalized.includes("overdue") || normalized.includes("reject") || normalized.includes("cancel")
+      ? "bg-rose-50 text-rose-700"
+      : normalized.includes("draft")
+        ? "bg-slate-100 text-slate-600"
+        : normalized.includes("partial")
+          ? "bg-amber-50 text-amber-700"
+          : "bg-blue-50 text-blue-700";
+  return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium capitalize ${styles}`}>{normalized}</span>;
+}
 
 export default function Home() {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [form, setForm] = useState({ username: "", password: "" });
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [summaryError, setSummaryError] = useState("");
+  const [isLoadingSummary, setIsLoadingSummary] = useState(false);
 
   useEffect(() => {
     let active = true;
-
     const restoreSession = async () => {
       try {
         await ensureCsrfCookie();
         const currentUser = await fetchJson<AuthSession>("/api/v1/auth/me/");
-        if (!active) return;
-        setSession(currentUser);
+        if (active) setSession(currentUser);
       } catch {
-        if (!active) return;
-        setSession(null);
+        if (active) setSession(null);
       }
     };
-
     void restoreSession();
-    return () => {
-      active = false;
-    };
+    return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    if (!session) return;
+    let active = true;
+    const loadSummary = async () => {
+      await Promise.resolve();
+      if (!active) return;
+      setIsLoadingSummary(true);
+      setSummaryError("");
+      try {
+        const payload = await fetchJson<DashboardSummary>("/api/v1/reporting/dashboard/");
+        if (active) setSummary(payload);
+      } catch (loadError) {
+        if (active) setSummaryError(loadError instanceof Error ? loadError.message : "Unable to load financial overview.");
+      } finally {
+        if (active) setIsLoadingSummary(false);
+      }
+    };
+    void loadSummary();
+    return () => { active = false; };
+  }, [session]);
 
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault();
     setError("");
     setIsSubmitting(true);
-
     try {
       await ensureCsrfCookie();
       const payload = await fetchJson<AuthSession>("/api/v1/auth/login/", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          username: form.username,
-          password: form.password,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
       });
-
       setSession(payload);
       setForm({ username: "", password: "" });
     } catch (loginError) {
-      const message = loginError instanceof Error ? loginError.message : "Unable to sign in.";
-      setError(message);
+      setError(loginError instanceof Error ? loginError.message : "Unable to sign in.");
     } finally {
       setIsSubmitting(false);
     }
@@ -81,55 +119,33 @@ export default function Home() {
 
   const logout = () => {
     setSession(null);
+    setSummary(null);
     void fetchJson("/api/v1/auth/logout/", { method: "POST" }).catch(() => undefined);
   };
 
   if (!session) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
-        <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-8 shadow-lg shadow-slate-200/80">
-          <div className="text-center">
-            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">Billy-in</div>
-            <h1 className="mt-3 text-3xl font-semibold text-slate-900">Operations login</h1>
-            <p className="mt-2 text-sm text-slate-500">Sign in to access the active tenant workspace.</p>
+      <div className="flex min-h-screen items-center justify-center bg-[#f4f6fa] px-4">
+        <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-8 shadow-xl shadow-slate-200/60">
+          <div className="mb-8">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950 text-lg font-semibold text-white">b.</div>
+            <p className="mt-6 text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">Billy-in workspace</p>
+            <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Welcome back.</h1>
+            <p className="mt-2 text-sm leading-6 text-slate-500">Sign in to manage your businesses and financial operations.</p>
           </div>
-
-          <form onSubmit={handleLogin} className="mt-8 space-y-4">
+          <form onSubmit={handleLogin} className="space-y-4">
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-700">Username</label>
-              <input
-                value={form.username}
-                onChange={(event) => setForm((current) => ({ ...current, username: event.target.value }))}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none transition focus:border-blue-500"
-                placeholder="admin"
-              />
+              <input required autoComplete="username" value={form.username} onChange={(event) => setForm((current) => ({ ...current, username: event.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm outline-none transition focus:border-blue-500 focus:bg-white" placeholder="Your username" />
             </div>
-
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-700">Password</label>
-              <input
-                type="password"
-                value={form.password}
-                onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none transition focus:border-blue-500"
-                placeholder="••••••••"
-              />
+              <input required type="password" autoComplete="current-password" value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm outline-none transition focus:border-blue-500 focus:bg-white" placeholder="Your password" />
             </div>
-
-            {error ? <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div> : null}
-
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="w-full rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400"
-            >
-              {isSubmitting ? "Signing in..." : "Sign in"}
-            </button>
+            {error ? <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-700">{error}</div> : null}
+            <button type="submit" disabled={isSubmitting} className="w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">{isSubmitting ? "Signing in…" : "Sign in to Billy-in"}</button>
           </form>
-
-          <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
-            API endpoint: <span className="font-medium text-slate-700">{API_BASE_URL}</span>
-          </div>
+          <p className="mt-6 text-center text-xs text-slate-400">Secure business workspace · {API_BASE_URL}</p>
         </div>
       </div>
     );
@@ -137,113 +153,93 @@ export default function Home() {
 
   return (
     <LayoutShell>
-      <div className="space-y-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="space-y-7">
+        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Overview</p>
-            <h2 className="mt-1 text-3xl font-semibold text-slate-900">Dashboard</h2>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">Business overview</p>
+            <h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Good to see you, {session.user.username}.</h2>
+            <p className="mt-2 text-sm text-slate-500">Here’s what’s happening across your workspace.</p>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700">
-              {session.tenants[0]?.tenant__name ?? "Tenant workspace"}
-            </div>
-            <button onClick={logout} className="rounded-xl bg-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-300">
-              Log out
-            </button>
+          <div className="flex items-center gap-2">
+            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700">Workspace active</span>
+            <button onClick={logout} className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-950">Log out</button>
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <StatCard label="Total invoiced" value="R 124,800.00" change="+12.5%" tone="blue" />
-          <StatCard label="Payments received" value="R 87,240.00" change="+8.4%" tone="green" />
-          <StatCard label="Outstanding" value="R 37,560.00" change="-3.2%" tone="amber" />
-          <StatCard label="Overdue invoices" value="4" change="Needs follow-up" tone="slate" />
+        {summaryError ? <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">The financial overview could not be loaded: {summaryError}</div> : null}
+
+        <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-4">
+          <MetricCard label="Total invoiced" value={isLoadingSummary && !summary ? "—" : money(summary?.total_invoiced ?? 0)} caption="Value of recorded invoices" accent="bg-blue-500" />
+          <MetricCard label="Payments received" value={isLoadingSummary && !summary ? "—" : money(summary?.total_payments_received ?? 0)} caption="Payments recorded in the system" accent="bg-emerald-500" />
+          <MetricCard label="Outstanding balance" value={isLoadingSummary && !summary ? "—" : money(summary?.outstanding_balances ?? 0)} caption="Remaining invoice balances" accent="bg-amber-500" />
+          <MetricCard label="Overdue invoices" value={isLoadingSummary && !summary ? "—" : String(summary?.overdue_invoices ?? 0)} caption="Invoices needing attention" accent="bg-rose-500" />
         </div>
 
-        <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/50">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-slate-900">Recent invoices</h3>
-              <button className="text-sm font-medium text-blue-600">View all</button>
-            </div>
-            <div className="space-y-3">
-              {recentInvoices.map((invoice) => (
-                <div key={invoice.id} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                  <div>
-                    <div className="font-medium text-slate-900">{invoice.id}</div>
-                    <div className="text-sm text-slate-500">{invoice.customer}</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-semibold text-slate-900">{invoice.total}</div>
-                    <div className="text-xs font-medium text-slate-500">{invoice.status}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <section className="rounded-2xl border border-slate-200/80 bg-white px-5 py-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Businesses</p>
+            <p className="mt-2 text-2xl font-semibold text-slate-950">{summary?.active_business_count ?? "—"}</p>
+            <p className="mt-1 text-xs text-slate-500">of {summary?.business_count ?? "—"} registered</p>
+          </section>
+          <section className="rounded-2xl border border-slate-200/80 bg-white px-5 py-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Customers</p>
+            <p className="mt-2 text-2xl font-semibold text-slate-950">{summary?.customer_count ?? "—"}</p>
+            <p className="mt-1 text-xs text-slate-500">Across your workspace</p>
+          </section>
+          <section className="rounded-2xl border border-slate-200/80 bg-white px-5 py-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Workspace access</p>
+            <p className="mt-2 text-2xl font-semibold capitalize text-slate-950">{session.tenants.length} tenant{session.tenants.length === 1 ? "" : "s"}</p>
+            <p className="mt-1 text-xs text-slate-500">Authenticated memberships</p>
+          </section>
+        </div>
 
-          <div className="space-y-6">
-            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/50">
-              <h3 className="text-lg font-semibold text-slate-900">Business summary</h3>
-              <div className="mt-5 space-y-4">
-                <div className="flex items-center justify-between text-sm text-slate-600">
-                  <span>Customers</span>
-                  <span className="font-semibold text-slate-900">128</span>
-                </div>
-                <div className="flex items-center justify-between text-sm text-slate-600">
-                  <span>Active businesses</span>
-                  <span className="font-semibold text-slate-900">3</span>
-                </div>
-                <div className="flex items-center justify-between text-sm text-slate-600">
-                  <span>Open quotations</span>
-                  <span className="font-semibold text-slate-900">14</span>
-                </div>
-              </div>
+        <div className="grid gap-5 2xl:grid-cols-[1.2fr_0.8fr]">
+          <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white">
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+              <div><h3 className="font-semibold text-slate-950">Recent invoices</h3><p className="mt-1 text-xs text-slate-400">Latest invoice activity</p></div>
+              <Link href="/invoices" className="text-sm font-medium text-blue-600 hover:text-blue-700">View invoices →</Link>
             </div>
-
-            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/50">
-              <h3 className="text-lg font-semibold text-slate-900">Recent payments</h3>
-              <div className="mt-5 space-y-3">
-                {recentPayments.map((payment) => (
-                  <div key={payment.id} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <div>
-                      <div className="font-medium text-slate-900">{payment.customer}</div>
-                      <div className="text-xs text-slate-500">{payment.method}</div>
-                    </div>
-                    <div className="font-semibold text-emerald-700">{payment.amount}</div>
+            {summary?.recent_invoices.length ? (
+              <div className="divide-y divide-slate-100">
+                {summary.recent_invoices.map((invoice) => (
+                  <div key={invoice.id} className="flex flex-col gap-2 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div><p className="text-sm font-semibold text-slate-800">{invoice.document_number}</p><p className="mt-1 text-sm text-slate-500">{invoice.customer_name} · {dateLabel(invoice.created_at)}</p></div>
+                    <div className="flex items-center justify-between gap-4 sm:justify-end"><span className="text-sm font-semibold text-slate-900">{money(invoice.total)}</span><StatusPill status={invoice.status} /></div>
                   </div>
                 ))}
               </div>
-            </div>
-          </div>
+            ) : <div className="px-5 py-10 text-center text-sm text-slate-400">{isLoadingSummary ? "Loading invoice activity…" : "No invoices have been recorded yet."}</div>}
+          </section>
+
+          <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white">
+            <div className="border-b border-slate-100 px-5 py-4"><h3 className="font-semibold text-slate-950">Recent payments</h3><p className="mt-1 text-xs text-slate-400">Money recorded as received</p></div>
+            {summary?.recent_payments.length ? (
+              <div className="divide-y divide-slate-100">
+                {summary.recent_payments.map((payment) => (
+                  <div key={payment.id} className="flex items-center justify-between gap-3 px-5 py-4">
+                    <div><p className="text-sm font-medium text-slate-800">{payment.customer_name}</p><p className="mt-1 text-xs capitalize text-slate-400">{payment.payment_method.replaceAll("_", " ")} · {dateLabel(payment.payment_date)}</p></div>
+                    <p className="whitespace-nowrap text-sm font-semibold text-emerald-700">+{money(payment.amount)}</p>
+                  </div>
+                ))}
+              </div>
+            ) : <div className="px-5 py-10 text-center text-sm text-slate-400">{isLoadingSummary ? "Loading payment activity…" : "No payments have been recorded yet."}</div>}
+          </section>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/50">
-            <h3 className="text-lg font-semibold text-slate-900">Recent quotations</h3>
-            <div className="mt-5 space-y-3">
-              {recentQuotations.map((quote) => (
-                <div key={quote.id} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                  <div>
-                    <div className="font-medium text-slate-900">{quote.id}</div>
-                    <div className="text-sm text-slate-500">{quote.customer}</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-semibold text-slate-900">{quote.total}</div>
-                    <div className="text-xs font-medium text-slate-500">{quote.status}</div>
-                  </div>
+        <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white">
+          <div className="border-b border-slate-100 px-5 py-4"><h3 className="font-semibold text-slate-950">Recent quotations</h3><p className="mt-1 text-xs text-slate-400">Your latest customer proposals</p></div>
+          {summary?.recent_quotations.length ? (
+            <div className="divide-y divide-slate-100">
+              {summary.recent_quotations.map((quote) => (
+                <div key={quote.id} className="flex flex-col gap-2 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div><p className="text-sm font-semibold text-slate-800">{quote.document_number}</p><p className="mt-1 text-sm text-slate-500">{quote.customer_name} · {dateLabel(quote.created_at)}</p></div>
+                  <div className="flex items-center justify-between gap-4 sm:justify-end"><span className="text-sm font-semibold text-slate-900">{money(quote.total)}</span><StatusPill status={quote.status} /></div>
                 </div>
               ))}
             </div>
-          </div>
-
-          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/50">
-            <h3 className="text-lg font-semibold text-slate-900">Platform status</h3>
-            <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-500">
-              Signed in as <span className="font-semibold text-slate-700">{session.user.username}</span> and connected to the active tenant workflow.
-            </div>
-          </div>
-        </div>
+          ) : <div className="px-5 py-10 text-center text-sm text-slate-400">{isLoadingSummary ? "Loading quotations…" : "No quotations have been created yet."}</div>}
+        </section>
+        <p className="text-xs leading-5 text-slate-400">Figures reflect records currently stored in Billy-in. Accounting statements and cash-flow analysis will be introduced after the financial ledger is implemented.</p>
       </div>
     </LayoutShell>
   );

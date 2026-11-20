@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from accounts.models import TenantMembership
+from accounts.tenant_context import resolve_request_tenant
 from .models import Business
 
 
@@ -20,12 +20,6 @@ class BusinessSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         request = self.context.get('request')
-        if request and not request.user.is_superuser:
-            membership = TenantMembership.objects.filter(user=request.user, is_active=True).order_by('pk').first()
-            if membership is None:
-                raise serializers.ValidationError({'tenant': 'User is not assigned to any tenant.'})
-            tenant = membership.tenant
-            if validated_data.get('tenant') and validated_data['tenant'] != tenant:
-                raise serializers.ValidationError({'tenant': 'Tenant does not match the authenticated user membership.'})
-            validated_data['tenant'] = tenant
+        if request:
+            validated_data['tenant'] = resolve_request_tenant(request)
         return super().create(validated_data)
