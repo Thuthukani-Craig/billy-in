@@ -22,7 +22,7 @@ def build_issued_snapshot(document):
     profile = DocumentDesignProfile.objects.filter(business=business, document_type=document.document_type).first()
     presentation = {
         "theme": profile.theme if profile else "CLASSIC",
-        "primary_colour": (profile.primary_colour if profile and profile.primary_colour else business.primary_brand_colour) or "#2563EB",
+        "primary_colour": (profile.primary_colour if profile else business.primary_brand_colour) or "",
         "show_logo": profile.show_logo if profile else True,
         "show_payment_details": profile.show_payment_details if profile else True,
         "show_business_registration": profile.show_business_registration if profile else True,
