@@ -9,17 +9,17 @@ type DashboardSummary = {
   business_count: number;
   active_business_count: number;
   customer_count: number;
-  total_invoiced: number;
-  total_payments_received: number;
-  outstanding_balances: number;
+  total_invoiced: number | string;
+  total_payments_received: number | string;
+  outstanding_balances: number | string;
   overdue_invoices: number;
   recent_invoices: Array<{ id: number; document_number: string; customer_name: string; total: number; status: string; created_at: string }>;
   recent_quotations: Array<{ id: number; document_number: string; customer_name: string; total: number; status: string; created_at: string }>;
   recent_payments: Array<{ id: number; customer_name: string; amount: number; payment_method: string; payment_date: string }>;
 };
 
-const money = (value: number) =>
-  new Intl.NumberFormat("en-ZA", { style: "currency", currency: "ZAR", maximumFractionDigits: 2 }).format(value || 0);
+const money = (value: number | string) =>
+  new Intl.NumberFormat("en-ZA", { style: "currency", currency: "ZAR", maximumFractionDigits: 2 }).format(Number(value || 0));
 
 const dateLabel = (value: string) =>
   new Intl.DateTimeFormat("en-ZA", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(value));
