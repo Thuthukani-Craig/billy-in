@@ -244,3 +244,50 @@ class QuotationWorkflowAPITest(TestCase):
             HTTP_X_TENANT_ID=str(self.tenant.id),
         )
         self.assertEqual(selected.status_code, status.HTTP_201_CREATED, selected.data)
+
+
+    def test_quotation_status_must_follow_valid_lifecycle(self):
+        create_response = self.client.post('/api/v1/documents/', {
+            'business': self.business.id,
+            'customer': self.customer.id,
+            'document_type': 'QUOTATION',
+            'status': 'draft',
+            'issue_date': '2026-11-20',
+            'line_items': [{
+                'description': 'Web development',
+                'quantity': '1.00',
+                'unit_price': '5000.00',
+                'discount': '0.00',
+                'tax_rate': '0.00',
+            }],
+        }, format='json')
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED, create_response.data)
+        document_id = create_response.data['id']
+
+        invalid = self.client.patch(f'/api/v1/documents/{document_id}/', {'status': 'paid'}, format='json')
+        self.assertEqual(invalid.status_code, status.HTTP_400_BAD_REQUEST)
+
+        issued = self.client.patch(f'/api/v1/documents/{document_id}/', {'status': 'issued'}, format='json')
+        self.assertEqual(issued.status_code, status.HTTP_200_OK, issued.data)
+
+        invalid_after_issue = self.client.patch(f'/api/v1/documents/{document_id}/', {'status': 'paid'}, format='json')
+        self.assertEqual(invalid_after_issue.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_viewer_membership_cannot_create_financial_documents(self):
+        viewer = get_user_model().objects.create_user(username='viewer-user', password='StrongPass123!')
+        TenantMembership.objects.create(user=viewer, tenant=self.tenant, role=TenantMembership.ROLE_VIEWER)
+        viewer_client = APIClient()
+        viewer_client.force_authenticate(user=viewer)
+        response = viewer_client.post('/api/v1/documents/', {
+            'business': self.business.id,
+            'customer': self.customer.id,
+            'document_type': 'QUOTATION',
+            'status': 'draft',
+            'line_items': [{
+                'description': 'Read-only test',
+                'quantity': '1.00',
+                'unit_price': '100.00',
+                'tax_rate': '0.00',
+            }],
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
