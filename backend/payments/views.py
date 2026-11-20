@@ -1,5 +1,7 @@
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
+from rest_framework import status
+from rest_framework.response import Response
 
 from accounts.models import TenantMembership
 from .models import Payment
@@ -10,6 +12,12 @@ class PaymentViewSet(viewsets.ModelViewSet):
     queryset = Payment.objects.select_related('tenant', 'business', 'customer', 'invoice').all()
     serializer_class = PaymentSerializer
     permission_classes = [IsAuthenticated]
+
+    def destroy(self, request, *args, **kwargs):
+        return Response(
+            {'detail': 'Payments cannot be deleted. A controlled reversal workflow will be provided.'},
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
 
     def get_queryset(self):
         queryset = Payment.objects.select_related('tenant', 'business', 'customer', 'invoice').all()
