@@ -38,10 +38,12 @@ def dashboard_summary(request):
         documents = documents.filter(business_id=business_id)
         payments = payments.filter(business_id=business_id)
 
-    total_invoiced = documents.filter(document_type='INVOICE').aggregate(total=Sum('total'))['total'] or Decimal('0.00')
+    invoice_statuses = ['issued', 'partially_paid', 'paid', 'overdue']
+    issued_invoices = documents.filter(document_type='INVOICE', status__in=invoice_statuses)
+    total_invoiced = issued_invoices.aggregate(total=Sum('total'))['total'] or Decimal('0.00')
     total_payments = payments.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
-    outstanding_balances = documents.filter(document_type='INVOICE').aggregate(total=Sum('outstanding_balance'))['total'] or Decimal('0.00')
-    overdue_invoices = documents.filter(document_type='INVOICE', status='overdue').count()
+    outstanding_balances = issued_invoices.aggregate(total=Sum('outstanding_balance'))['total'] or Decimal('0.00')
+    overdue_invoices = issued_invoices.filter(status='overdue').count()
 
     response = {
         'business_count': businesses.count(),
