@@ -78,6 +78,12 @@ class Document(models.Model):
             raise ValidationError({'customer': 'Customer must belong to the same tenant as the document.'})
         if self.document_type == self.DOCUMENT_TYPE_RECEIPT and self.payment is None:
             raise ValidationError({'payment': 'Receipts must be linked to a payment record.'})
+        if self.payment_id and self.tenant_id and self.payment.tenant_id != self.tenant_id:
+            raise ValidationError({'payment': 'Payment must belong to the same tenant as the receipt.'})
+        if self.payment_id and self.business_id and self.payment.business_id != self.business_id:
+            raise ValidationError({'payment': 'Payment must belong to the same business as the receipt.'})
+        if self.payment_id and self.customer_id and self.payment.customer_id != self.customer_id:
+            raise ValidationError({'payment': 'Payment customer must match the receipt customer.'})
 
     def save(self, *args, **kwargs):
         self.full_clean()
