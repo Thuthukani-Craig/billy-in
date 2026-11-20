@@ -127,7 +127,7 @@ class DocumentSerializer(serializers.ModelSerializer):
         for item_data in line_items_data:
             DocumentLineItem.objects.create(document=document, **item_data)
         document.refresh_from_db()
-        if document.status != Document.STATUS_DRAFT:
+        if document.status == Document.STATUS_ISSUED:
             capture_issued_snapshot(document)
         return document
 
@@ -144,7 +144,7 @@ class DocumentSerializer(serializers.ModelSerializer):
             for item_data in line_items_data:
                 DocumentLineItem.objects.create(document=instance, **item_data)
         instance.save()
-        if instance.status != Document.STATUS_DRAFT:
+        if instance.status == Document.STATUS_ISSUED:
             capture_issued_snapshot(instance)
         return instance
 
